@@ -12,6 +12,10 @@ export default {
         "2xl": "1400px",
       },
     },
+    fontFamily: {
+      sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+      display: ['Space Grotesk', 'sans-serif'],
+    },
     extend: {
       colors: {
         border: "hsl(var(--border))",
@@ -46,6 +50,16 @@ export default {
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        scenario: {
+          food: "hsl(var(--scenario-food))",
+          help: "hsl(var(--scenario-help))",
+          shopping: "hsl(var(--scenario-shopping))",
+          social: "hsl(var(--scenario-social))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
