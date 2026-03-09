@@ -214,7 +214,7 @@ const Index = () => {
                 <div>
                   <h3 className="font-display text-xl font-bold text-foreground">AAC Mode</h3>
                   <p className="text-muted-foreground">
-                    Practice check-in with AAC responses using phrase buttons or typed messages.
+                    Practice check-in with AAC (Augmentative and Alternative Communication) responses using phrase buttons or typed messages.
                   </p>
                 </div>
               </CardContent>
