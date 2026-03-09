@@ -123,8 +123,8 @@ const Index = () => {
       {/* Featured: Airport Check-in */}
       <section className="max-w-4xl mx-auto px-4 py-8">
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-          <h2 className="font-display text-2xl font-bold text-foreground mb-4">
-            🎤 Voice Scenario — Try it now!
+          <h2 className="font-display text-2xl font-bold text-foreground mb-4 md:text-3xl">
+            Voice Scenarios
           </h2>
           <Card
             className="border-2 border-primary/20 hover:border-primary cursor-pointer transition-colors"
@@ -203,7 +203,7 @@ const Index = () => {
         <p className="text-sm text-muted-foreground">
           CommPractice — Empowering communication through practice.
           <br />
-          Serving people with disabilities since 2006.
+          Serving people with disabilities.
         </p>
       </footer>
     </div>
