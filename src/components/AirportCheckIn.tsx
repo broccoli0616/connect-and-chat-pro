@@ -443,7 +443,9 @@ const AirportCheckIn = ({ onBack, mode = "voice" }: AirportCheckInProps) => {
                 className="bg-accent/10 border-2 border-accent/20 rounded-xl p-4 flex items-start gap-3 max-w-sm"
               >
                 <Lightbulb className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-foreground">{checkpoint.hintPrompt}</p>
+                <p className="text-sm text-foreground">
+                  {mode === "aac" ? (checkpoint.aacHintPrompt || checkpoint.hintPrompt) : checkpoint.hintPrompt}
+                </p>
               </motion.div>
             )}
           </AnimatePresence>

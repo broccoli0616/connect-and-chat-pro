@@ -9,6 +9,7 @@ export interface Checkpoint {
   id: string;
   mascotPrompt: string;
   hintPrompt: string;
+  aacHintPrompt?: string;
   keywords: string[];
   aacPictureCards: AacPictureCard[];
   validAacCombinations?: string[][];
@@ -71,7 +72,8 @@ export const airportCheckInScenario: Checkpoint[] = [
   {
     id: "greeting",
     mascotPrompt: "Hello! Welcome to the airport check-in counter. Where is your destination today?",
-    hintPrompt: "Try saying a city name like 'London' or 'Tokyo'. In AAC mode, build: I + go + to + city.",
+    hintPrompt: "Try saying a city name, like 'London' or 'Tokyo'.",
+    aacHintPrompt: "Build a phrase: I + go + to + city (e.g. I go to London).",
     keywords: ["london", "tokyo", "new york", "paris", "singapore", "sydney"],
     aacPictureCards: [
       customCards.i,
@@ -104,7 +106,8 @@ export const airportCheckInScenario: Checkpoint[] = [
   {
     id: "passengers",
     mascotPrompt: "How many passengers are travelling today?",
-    hintPrompt: "In AAC mode, build one of these: I + 1, I + with + 2, I + with + 3, I + with + 4.",
+    hintPrompt: "Try saying a number, like 'just me' or 'two passengers'.",
+    aacHintPrompt: "Build: I + 1 (alone) or I + with + 2 / 3 / 4.",
     keywords: ["one", "1", "two", "2", "three", "3", "four", "4", "just me", "myself"],
     aacPictureCards: [
       customCards.i,
@@ -135,7 +138,8 @@ export const airportCheckInScenario: Checkpoint[] = [
   {
     id: "luggage",
     mascotPrompt: "Do you have any luggage to check in today?",
-    hintPrompt: "Say 'yes, one bag' or 'no luggage'. In AAC mode: yes + with + 1 + bag, no + bag, or carry-on.",
+    hintPrompt: "Say 'yes, one bag', 'no luggage', or 'I have a suitcase'.",
+    aacHintPrompt: "Try: yes + with + 1 + bag, no + bag, or carry-on.",
     keywords: ["yes", "no", "bag", "suitcase", "luggage", "carry", "none"],
     aacPictureCards: [
       customCards.yes,
@@ -166,7 +170,8 @@ export const airportCheckInScenario: Checkpoint[] = [
   {
     id: "passport",
     mascotPrompt: "May I see your passport or ID please?",
-    hintPrompt: "AAC options that work: yes + passport, yes + ID card, here you go + passport, or I need help.",
+    hintPrompt: "Try saying 'here you go' or 'here is my passport'.",
+    aacHintPrompt: "Try: yes + passport, here you go + passport, or I need help.",
     keywords: ["here", "passport", "id", "sure", "yes", "okay", "help"],
     aacPictureCards: [
       customCards.yes,
