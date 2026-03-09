@@ -3,7 +3,7 @@ import { useState, useCallback } from "react";
 export const useSpeechSynthesis = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  const speak = useCallback((text: string) => {
+  const speak = useCallback((text: string, language = "en-US") => {
     return new Promise<void>((resolve) => {
       if (!window.speechSynthesis) {
         resolve();
@@ -11,6 +11,13 @@ export const useSpeechSynthesis = () => {
       }
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = language;
+      const voice = window.speechSynthesis
+        .getVoices()
+        .find((v) => v.lang.toLowerCase().startsWith(language.toLowerCase().split("-")[0]));
+      if (voice) {
+        utterance.voice = voice;
+      }
       utterance.rate = 0.9;
       utterance.pitch = 1.1;
       utterance.onstart = () => setIsSpeaking(true);

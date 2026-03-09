@@ -13,7 +13,13 @@ import { LogOut, Plane } from "lucide-react";
 import heroIllustration from "@/assets/hero-illustration.png";
 
 type CategoryFilter = "all" | "food" | "help" | "shopping" | "social";
-type AppView = "onboarding" | "mode-select" | "home" | "scenario" | "airport-checkin";
+type AppView =
+  | "onboarding"
+  | "mode-select"
+  | "home"
+  | "scenario"
+  | "airport-checkin"
+  | "multiplayer-lobby";
 
 const Index = () => {
   const [view, setView] = useState<AppView>("onboarding");
@@ -41,9 +47,33 @@ const Index = () => {
     return (
       <ModeSelect
         onSelectSingle={() => setView("home")}
-        onSelectMulti={() => {}}
+        onSelectMulti={() => setView("multiplayer-lobby")}
         onBack={handleLogout}
       />
+    );
+  }
+
+  if (view === "multiplayer-lobby") {
+    return (
+      <div className="min-h-screen bg-background p-6 flex items-center justify-center">
+        <Card className="max-w-2xl w-full border-2 border-primary/20">
+          <CardContent className="p-8">
+            <h2 className="font-display text-3xl font-bold text-foreground mb-3">Multiplayer Demo Lobby</h2>
+            <p className="text-muted-foreground mb-6">
+              Invite a friend and practise together. For this demo, both users can take turns on the
+              same device and run the Airport Check-in roleplay.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button variant="accent" onClick={() => setView("airport-checkin")}>
+                Start Shared Airport Scenario
+              </Button>
+              <Button variant="outline" onClick={() => setView("mode-select")}>
+                Back to Mode Selection
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 

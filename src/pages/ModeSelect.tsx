@@ -49,7 +49,7 @@ const ModeSelect = ({ onSelectSingle, onSelectMulti, onBack }: ModeSelectProps) 
 
           <motion.div whileTap={{ scale: 0.98 }}>
             <Card
-              className="cursor-pointer border-2 hover:border-primary transition-colors opacity-60"
+              className="cursor-pointer border-2 hover:border-primary transition-colors"
               onClick={onSelectMulti}
             >
               <CardContent className="p-6 flex items-center gap-4">
@@ -58,8 +58,8 @@ const ModeSelect = ({ onSelectSingle, onSelectMulti, onBack }: ModeSelectProps) 
                 </div>
                 <div>
                   <h2 className="font-display text-xl font-bold text-foreground">Multiplayer</h2>
-                  <p className="text-muted-foreground">Practise with a friend or partner online</p>
-                  <span className="text-xs font-semibold text-accent">Coming soon</span>
+                  <p className="text-muted-foreground">Practise with a partner and switch turns in shared prompts</p>
+                  <span className="text-xs font-semibold text-accent">Demo lobby</span>
                 </div>
               </CardContent>
             </Card>

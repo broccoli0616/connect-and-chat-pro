@@ -14,15 +14,28 @@ const roles = [
   { value: "therapist" as const, label: "I'm a therapist", icon: "💼" },
 ];
 
+const languages = [
+  { value: "en-US" as const, label: "English" },
+  { value: "zh-CN" as const, label: "Chinese (Simplified)" },
+];
+
 const Onboarding = ({ onComplete }: OnboardingProps) => {
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [role, setRole] = useState<UserProfile["role"] | "">("");
+  const [preferredLanguage, setPreferredLanguage] =
+    useState<UserProfile["preferredLanguage"]>("en-US");
 
   const handleFinish = () => {
     if (!name || !age || !role) return;
-    saveProfile({ name, age, role, createdAt: new Date().toISOString() });
+    saveProfile({
+      name,
+      age,
+      role,
+      preferredLanguage,
+      createdAt: new Date().toISOString(),
+    });
     onComplete();
   };
 
@@ -40,7 +53,7 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
           <h1 className="font-display text-3xl font-bold text-foreground mb-2">
             Welcome to CommPractice
           </h1>
-          <p className="text-muted-foreground">Let's set up your profile</p>
+          <p className="text-muted-foreground">Let&apos;s set up your profile</p>
         </div>
 
         {step === 0 && (
@@ -92,6 +105,26 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
                   {r.label}
                 </Button>
               ))}
+            </div>
+            <div className="pt-2">
+              <label className="block text-sm font-semibold text-foreground mb-2">Preferred language</label>
+              <div className="grid grid-cols-2 gap-2">
+                {languages.map((language) => (
+                  <Button
+                    key={language.value}
+                    type="button"
+                    variant="outline"
+                    className={`w-full ${
+                      preferredLanguage === language.value
+                        ? "border-primary ring-2 ring-primary bg-primary/5"
+                        : ""
+                    }`}
+                    onClick={() => setPreferredLanguage(language.value)}
+                  >
+                    {language.label}
+                  </Button>
+                ))}
+              </div>
             </div>
             <Button size="lg" variant="accent" className="w-full" disabled={!role} onClick={handleFinish}>
               Get Started 🚀

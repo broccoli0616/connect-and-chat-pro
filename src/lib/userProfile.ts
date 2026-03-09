@@ -2,6 +2,7 @@ export interface UserProfile {
   name: string;
   age: string;
   role: "learner" | "caregiver" | "therapist";
+  preferredLanguage: "en-US" | "zh-CN";
   createdAt: string;
 }
 

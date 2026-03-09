@@ -1,5 +1,33 @@
 # Welcome to your Lovable project
 
+## AI Agent setup (Groq)
+
+This project uses a frontend demo AI agent for checkpoint analysis in the Airport Check-in scenario.
+
+1. Create a local env file:
+
+```sh
+cp .env.example .env
+```
+
+2. Add your Groq API key in `.env`:
+
+```sh
+VITE_GROQ_API_KEY=your_key_here
+```
+
+3. Start the app:
+
+```sh
+npm run dev
+```
+
+Notes:
+- `.env` is gitignored so your key is not committed.
+- If no key is set, the app uses a fallback local checkpoint evaluator so demos still run.
+- User personalization currently includes age, role, and preferred language from onboarding.
+- Multiplayer is available as a demo lobby where users can take turns on one device.
+
 ## Project info
 
 **URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
