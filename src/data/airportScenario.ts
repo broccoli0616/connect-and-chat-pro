@@ -11,7 +11,7 @@ export const airportCheckInScenario: Checkpoint[] = [
   {
     id: "greeting",
     mascotPrompt: "Hello! Welcome to the airport check-in counter. Where is your destination today?",
-    hintPrompt: "Try saying the name of a city or country, like 'I'm going to London' or 'Tokyo'.",
+    hintPrompt: "Try saying the name of a city or country.",
     keywords: [],
     successResponse: "Great choice! Let me look that up for you.",
     extractField: "destination",
@@ -27,7 +27,7 @@ export const airportCheckInScenario: Checkpoint[] = [
   {
     id: "luggage",
     mascotPrompt: "Do you have any luggage to check in today?",
-    hintPrompt: "You can say 'yes, one bag' or 'no luggage' or 'I have a suitcase'.",
+    hintPrompt: "You can say 'yes' or 'no luggage' or 'I have'.",
     keywords: ["yes", "no", "bag", "suitcase", "luggage", "carry", "none"],
     successResponse: "Alright, I've recorded your luggage information.",
     extractField: "luggage",

@@ -8,7 +8,7 @@ import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import CameraFeed from "@/components/CameraFeed";
 import MascotAvatar from "@/components/MascotAvatar";
 import { getProfile } from "@/lib/userProfile";
-import { analyzeCheckpointWithAgent } from "@/lib/aiAgent";
+import { analyzeCheckpointWithAgent, type AgentMode } from "@/lib/aiAgent";
 import {
   ArrowLeft,
   Mic,
@@ -39,12 +39,13 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [mascotMessage, setMascotMessage] = useState("");
   const [showHint, setShowHint] = useState(false);
-  const [hintTimer, setHintTimer] = useState<NodeJS.Timeout | null>(null);
+  const [hintTimer, setHintTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [waitingForResponse, setWaitingForResponse] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [coachingTip, setCoachingTip] = useState("");
   const [capturedAnswers, setCapturedAnswers] = useState<Record<string, string>>({});
+  const [selectedMode, setSelectedMode] = useState<AgentMode>("coaching");
   const lastProcessedTranscriptRef = useRef("");
 
   const {
@@ -57,6 +58,7 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
     isSupported,
     error: speechError,
   } = useSpeechRecognition();
+
   const { speak, isSpeaking, stop: stopSpeaking } = useSpeechSynthesis();
 
   const checkpoint = airportCheckInScenario[currentIndex];
@@ -76,7 +78,7 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
       const firstName = profile?.name?.split(" ")[0] || "there";
       const personalizedPrompt =
         checkpoint.id === "greeting"
-          ? `Hi ${firstName}. ${checkpoint.mascotPrompt}`
+          ? `${checkpoint.mascotPrompt}`
           : checkpoint.mascotPrompt;
 
       setMascotMessage(personalizedPrompt);
@@ -110,7 +112,12 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
       if (!checkpoint || isLastCheckpoint) return;
 
       setIsAnalyzing(true);
-      const result = await analyzeCheckpointWithAgent(checkpoint, userSpeech, effectiveProfile);
+      const result = await analyzeCheckpointWithAgent(
+        checkpoint,
+        userSpeech,
+        effectiveProfile,
+        selectedMode
+      );
       setIsAnalyzing(false);
 
       if (result.coachingTip) {
@@ -140,7 +147,7 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
         setWaitingForResponse(true);
       }
     },
-    [checkpoint, effectiveProfile, isLastCheckpoint, speak, userLanguage]
+    [checkpoint, effectiveProfile, isLastCheckpoint, selectedMode, speak, userLanguage]
   );
 
   useEffect(() => {
@@ -191,13 +198,19 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
           Check-in Complete!
         </h2>
         <p className="text-lg text-muted-foreground mb-8">
-          Nice work, {profile?.name || "traveler"}. You completed this guided airport check-in.
+          Nice work, {profile?.name || "traveler"}. You completed this airport check-in.
         </p>
         <div className="mb-8 bg-card border-2 border-border rounded-xl p-4 text-left">
           <p className="text-sm font-semibold text-muted-foreground mb-2">Session summary</p>
-          <p className="text-foreground text-sm">Destination: {capturedAnswers.destination || "Not captured"}</p>
-          <p className="text-foreground text-sm">Passengers: {capturedAnswers.passengers || "Not captured"}</p>
-          <p className="text-foreground text-sm">Luggage: {capturedAnswers.luggage || "Not captured"}</p>
+          <p className="text-foreground text-sm">
+            Destination: {capturedAnswers.destination || "Not captured"}
+          </p>
+          <p className="text-foreground text-sm">
+            Passengers: {capturedAnswers.passengers || "Not captured"}
+          </p>
+          <p className="text-foreground text-sm">
+            Luggage: {capturedAnswers.luggage || "Not captured"}
+          </p>
         </div>
         <div className="flex items-center justify-center gap-2 mb-8">
           {[...Array(3)].map((_, i) => (
@@ -230,16 +243,43 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="flex-1">
-          <h2 className="font-display text-xl font-bold text-foreground">
-            ✈️ Airport Check-in
-          </h2>
+          <h2 className="font-display text-xl font-bold text-foreground">✈️ Airport Check-in</h2>
           <p className="text-sm text-muted-foreground">
             Step {currentIndex + 1} of {airportCheckInScenario.length}
           </p>
         </div>
       </div>
 
-      <Progress value={progress} className="mb-6 h-3" />
+      <Progress value={progress} className="mb-4 h-3" />
+
+      <div className="mb-6 rounded-xl border bg-card p-3">
+        <p className="text-sm font-medium mb-2">Conversation mode</p>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={selectedMode === "coaching" ? "accent" : "outline"}
+            onClick={() => setSelectedMode("coaching")}
+            disabled={isListening || isAnalyzing || isTranscribing}
+          >
+            Coaching
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={selectedMode === "realistic" ? "accent" : "outline"}
+            onClick={() => setSelectedMode("realistic")}
+            disabled={isListening || isAnalyzing || isTranscribing}
+          >
+            Realistic
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          {selectedMode === "coaching"
+            ? "AI guides you and gives tips."
+            : "AI behaves like real check-in staff with less guidance."}
+        </p>
+      </div>
 
       <div className="grid md:grid-cols-2 gap-6">
         <div className="space-y-4">
