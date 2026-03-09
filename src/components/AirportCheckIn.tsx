@@ -7,88 +7,77 @@ import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import CameraFeed from "@/components/CameraFeed";
 import MascotAvatar from "@/components/MascotAvatar";
-import { getProfile } from "@/lib/userProfile";
-import { analyzeCheckpointWithAgent, type AgentMode } from "@/lib/aiAgent";
-import {
-  ArrowLeft,
-  Mic,
-  MicOff,
-  Lightbulb,
-  RotateCcw,
-  Star,
-  Loader2,
-} from "lucide-react";
+import { ArrowLeft, Mic, MicOff, Lightbulb, RotateCcw, Star } from "lucide-react";
 
 interface AirportCheckInProps {
   onBack: () => void;
+  mode?: "voice" | "aac";
 }
 
 const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
-  const profile = getProfile();
-  const effectiveProfile =
-    profile ||
-    ({
-      name: "Traveler",
-      age: "18",
-      role: "learner",
-      preferredLanguage: "en-US",
-      createdAt: new Date().toISOString(),
-    } as const);
-  const userLanguage = profile?.preferredLanguage || "en-US";
-
   const [currentIndex, setCurrentIndex] = useState(0);
   const [mascotMessage, setMascotMessage] = useState("");
   const [showHint, setShowHint] = useState(false);
   const [hintTimer, setHintTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [waitingForResponse, setWaitingForResponse] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [coachingTip, setCoachingTip] = useState("");
-  const [capturedAnswers, setCapturedAnswers] = useState<Record<string, string>>({});
-  const [selectedMode, setSelectedMode] = useState<AgentMode>("coaching");
-  const lastProcessedTranscriptRef = useRef("");
 
-  const {
-    isListening,
-    isTranscribing,
-    transcript,
-    startListening,
-    stopListening,
-    resetTranscript,
-    isSupported,
-    error: speechError,
-  } = useSpeechRecognition();
-
+  const { isListening, transcript, startListening, stopListening, resetTranscript, isSupported } =
+    useSpeechRecognition();
   const { speak, isSpeaking, stop: stopSpeaking } = useSpeechSynthesis();
 
-  const checkpoint = airportCheckInScenario[currentIndex];
-  const isLastCheckpoint = currentIndex === airportCheckInScenario.length - 1;
-  const progress = (currentIndex / (airportCheckInScenario.length - 1)) * 100;
+  const safeSpeak = useCallback(
+    async (text: string) => {
+      // Never let blocked/slow TTS freeze scenario progression.
+      await Promise.race([
+        speak(text),
+        new Promise<void>((resolve) => setTimeout(resolve, 1800)),
+      ]);
+    },
+    [speak]
+  );
+
+  const lastCheckpointIndex = airportCheckInScenario.length - 1;
+  const safeIndex = Math.min(Math.max(currentIndex, 0), lastCheckpointIndex);
+  const checkpoint = airportCheckInScenario[safeIndex];
+  const isLastCheckpoint = safeIndex === lastCheckpointIndex;
+  const progress = (safeIndex / lastCheckpointIndex) * 100;
+  const availableCards = checkpoint?.aacPictureCards.filter(Boolean) ?? [];
+
+  const getCardById = useCallback(
+    (cardId: string) => availableCards.find((card) => card.id === cardId),
+    [availableCards]
+  );
+
+  const isValidAacSelection = useCallback(
+    (selectedIds: string[]) => {
+      if (!checkpoint?.validAacCombinations?.length) return false;
+      const normalized = [...selectedIds].sort();
+      return checkpoint.validAacCombinations.some((combo) => {
+        const sortedCombo = [...combo].sort();
+        if (sortedCombo.length !== normalized.length) return false;
+        return sortedCombo.every((id, idx) => id === normalized[idx]);
+      });
+    },
+    [checkpoint]
+  );
 
   useEffect(() => {
     if (!checkpoint) return;
-
+    setMascotMessage(checkpoint.mascotPrompt);
     setShowHint(false);
     setWaitingForResponse(false);
-    setCoachingTip("");
-    lastProcessedTranscriptRef.current = "";
     resetTranscript();
 
     const speakAndWait = async () => {
-      const firstName = profile?.name?.split(" ")[0] || "there";
-      const personalizedPrompt =
-        checkpoint.id === "greeting"
-          ? `${checkpoint.mascotPrompt}`
-          : checkpoint.mascotPrompt;
-
-      setMascotMessage(personalizedPrompt);
-      await speak(personalizedPrompt, userLanguage);
-
+      await speak(checkpoint.mascotPrompt);
       if (!isLastCheckpoint) {
         setWaitingForResponse(true);
+        setIsAdvancing(false);
       } else {
         setTimeout(() => setIsComplete(true), 1600);
       }
+      void safeSpeak(checkpoint.mascotPrompt);
     };
 
     speakAndWait();
@@ -110,57 +99,40 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
   const processResponse = useCallback(
     async (userSpeech: string) => {
       if (!checkpoint || isLastCheckpoint) return;
+      const lower = userSpeech.toLowerCase();
 
-      setIsAnalyzing(true);
-      const result = await analyzeCheckpointWithAgent(
-        checkpoint,
-        userSpeech,
-        effectiveProfile,
-        selectedMode
-      );
-      setIsAnalyzing(false);
+      // For destination (first checkpoint), accept any multi-word answer
+      const isAccepted =
+        checkpoint.id === "greeting"
+          ? lower.trim().length > 2
+          : checkpoint.keywords.some((kw) => lower.includes(kw));
 
-      if (result.coachingTip) {
-        setCoachingTip(result.coachingTip);
-      }
-
-      if (result.accepted) {
+      if (isAccepted) {
         setShowHint(false);
         setWaitingForResponse(false);
-
-        if (checkpoint.extractField) {
-          setCapturedAnswers((prev) => ({
-            ...prev,
-            [checkpoint.extractField!]: result.extractedValue || userSpeech,
-          }));
-        }
-
-        setMascotMessage(result.feedback);
-        await speak(result.feedback, userLanguage);
-
+        setMascotMessage(checkpoint.successResponse);
+        await speak(checkpoint.successResponse);
         setTimeout(() => {
           setCurrentIndex((prev) => prev + 1);
-        }, 700);
+        }, 800);
       } else {
-        setMascotMessage(result.feedback || checkpoint.hintPrompt);
-        await speak(result.feedback || checkpoint.hintPrompt, userLanguage);
+        setMascotMessage(checkpoint.hintPrompt);
+        await speak(checkpoint.hintPrompt);
         setWaitingForResponse(true);
       }
     },
-    [checkpoint, effectiveProfile, isLastCheckpoint, selectedMode, speak, userLanguage]
+    [checkpoint, isLastCheckpoint, speak]
   );
 
   useEffect(() => {
-    const cleaned = transcript.trim();
-    if (!cleaned) return;
-    if (!waitingForResponse || isAnalyzing || isTranscribing || isListening) return;
-    if (cleaned === lastProcessedTranscriptRef.current) return;
-
-    lastProcessedTranscriptRef.current = cleaned;
-    processResponse(cleaned);
-  }, [isAnalyzing, isListening, isTranscribing, processResponse, transcript, waitingForResponse]);
+    if (!isListening && transcript && waitingForResponse) {
+      processResponse(transcript);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isListening]);
 
   const handleMicToggle = () => {
+    if (mode !== "voice") return;
     if (isListening) {
       stopListening();
     } else {
@@ -170,12 +142,39 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
     }
   };
 
+  const handleAacCardSelect = (cardId: string) => {
+    if (!waitingForResponse || isSpeaking) return;
+    setAacStrip((prev) => {
+      if (prev.includes(cardId)) return prev;
+      return [...prev, cardId].slice(-6);
+    });
+  };
+
+  const handleAacUndo = () => {
+    setAacStrip((prev) => prev.slice(0, -1));
+  };
+
+  const handleAacSend = () => {
+    if (!checkpoint || !waitingForResponse || aacStrip.length === 0 || isAdvancing) return;
+    if (isValidAacSelection(aacStrip)) {
+      const selectedMessage = aacStrip
+        .map((cardId) => getCardById(cardId)?.label || "")
+        .filter(Boolean)
+        .join(" ");
+      processResponse(selectedMessage);
+      return;
+    }
+
+    setMascotMessage(checkpoint.hintPrompt);
+    void safeSpeak(checkpoint.hintPrompt);
+    setWaitingForResponse(true);
+  };
+
   const handleRestart = () => {
+    stopListening();
     stopSpeaking();
     setCurrentIndex(0);
     setIsComplete(false);
-    setCapturedAnswers({});
-    setCoachingTip("");
     resetTranscript();
   };
 
@@ -198,20 +197,8 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
           Check-in Complete!
         </h2>
         <p className="text-lg text-muted-foreground mb-8">
-          Nice work, {profile?.name || "traveler"}. You completed this airport check-in.
+          You successfully completed the airport check-in! Great communication skills!
         </p>
-        <div className="mb-8 bg-card border-2 border-border rounded-xl p-4 text-left">
-          <p className="text-sm font-semibold text-muted-foreground mb-2">Session summary</p>
-          <p className="text-foreground text-sm">
-            Destination: {capturedAnswers.destination || "Not captured"}
-          </p>
-          <p className="text-foreground text-sm">
-            Passengers: {capturedAnswers.passengers || "Not captured"}
-          </p>
-          <p className="text-foreground text-sm">
-            Luggage: {capturedAnswers.luggage || "Not captured"}
-          </p>
-        </div>
         <div className="flex items-center justify-center gap-2 mb-8">
           {[...Array(3)].map((_, i) => (
             <motion.div
@@ -236,14 +223,28 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
     );
   }
 
+  if (!checkpoint) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-10 text-center">
+        <p className="text-muted-foreground mb-4">Something went wrong with this step. Please restart.</p>
+        <Button variant="accent" onClick={handleRestart}>
+          <RotateCcw className="w-4 h-4" /> Restart Scenario
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
+      {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="flex-1">
-          <h2 className="font-display text-xl font-bold text-foreground">✈️ Airport Check-in</h2>
+          <h2 className="font-display text-xl font-bold text-foreground">
+            ✈️ Airport Check-in
+          </h2>
           <p className="text-sm text-muted-foreground">
             Step {currentIndex + 1} of {airportCheckInScenario.length}
           </p>
@@ -282,9 +283,11 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
+        {/* Left: Camera + Mic */}
         <div className="space-y-4">
-          <CameraFeed />
+          {mode === "voice" && <CameraFeed />}
 
+          {/* Mic button */}
           {waitingForResponse && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
               <Button
@@ -315,6 +318,7 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
             </motion.div>
           )}
 
+          {/* Transcript */}
           {transcript && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -324,18 +328,6 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
               <p className="text-xs font-semibold text-muted-foreground uppercase mb-1">You said:</p>
               <p className="text-foreground text-lg">"{transcript}"</p>
             </motion.div>
-          )}
-
-          {isAnalyzing && (
-            <div className="bg-muted border rounded-xl p-3 flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" /> AI agent is analyzing your response...
-            </div>
-          )}
-
-          {isTranscribing && (
-            <div className="bg-muted border rounded-xl p-3 flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" /> Transcribing speech with Whisper...
-            </div>
           )}
         </div>
 
