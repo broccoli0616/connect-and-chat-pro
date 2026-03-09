@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { flushSync } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -7,35 +8,51 @@ import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import CameraFeed from "@/components/CameraFeed";
 import MascotAvatar from "@/components/MascotAvatar";
-import { ArrowLeft, Mic, MicOff, Lightbulb, RotateCcw, Star } from "lucide-react";
+import { getProfile } from "@/lib/userProfile";
+import { analyzeCheckpointWithAgent, AgentMode } from "@/lib/aiAgent";
+import { ArrowLeft, Mic, MicOff, Lightbulb, RotateCcw, Star, Loader2 } from "lucide-react";
 
 interface AirportCheckInProps {
   onBack: () => void;
   mode?: "voice" | "aac";
 }
 
-const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
+const AirportCheckIn = ({ onBack, mode = "voice" }: AirportCheckInProps) => {
+  const profile = getProfile();
+  const effectiveProfile = profile || {
+    name: "Traveler",
+    age: "18",
+    role: "learner" as const,
+    preferredLanguage: "en-US",
+    createdAt: new Date().toISOString(),
+  };
+  const userLanguage = profile?.preferredLanguage || "en-US";
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [mascotMessage, setMascotMessage] = useState("");
   const [showHint, setShowHint] = useState(false);
   const [hintTimer, setHintTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [waitingForResponse, setWaitingForResponse] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [coachingTip, setCoachingTip] = useState("");
+  const [capturedAnswers, setCapturedAnswers] = useState<Record<string, string>>({});
+  const [selectedMode, setSelectedMode] = useState<AgentMode>("coaching");
+  const [aacStrip, setAacStrip] = useState<string[]>([]);
+  const [isAdvancing, setIsAdvancing] = useState(false);
+  const lastProcessedTranscriptRef = useRef("");
 
-  const { isListening, transcript, startListening, stopListening, resetTranscript, isSupported } =
-    useSpeechRecognition();
+  const {
+    isListening,
+    isTranscribing,
+    transcript,
+    startListening,
+    stopListening,
+    resetTranscript,
+    isSupported,
+    error: speechError,
+  } = useSpeechRecognition();
   const { speak, isSpeaking, stop: stopSpeaking } = useSpeechSynthesis();
-
-  const safeSpeak = useCallback(
-    async (text: string) => {
-      // Never let blocked/slow TTS freeze scenario progression.
-      await Promise.race([
-        speak(text),
-        new Promise<void>((resolve) => setTimeout(resolve, 1800)),
-      ]);
-    },
-    [speak]
-  );
 
   const lastCheckpointIndex = airportCheckInScenario.length - 1;
   const safeIndex = Math.min(Math.max(currentIndex, 0), lastCheckpointIndex);
@@ -67,17 +84,25 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
     setMascotMessage(checkpoint.mascotPrompt);
     setShowHint(false);
     setWaitingForResponse(false);
+    setCoachingTip("");
+    setAacStrip([]);
+    lastProcessedTranscriptRef.current = "";
     resetTranscript();
 
     const speakAndWait = async () => {
-      await speak(checkpoint.mascotPrompt);
+      const firstName = profile?.name?.split(" ")[0] || "there";
+      const personalizedPrompt =
+        checkpoint.id === "greeting"
+          ? `Hi ${firstName}. ${checkpoint.mascotPrompt}`
+          : checkpoint.mascotPrompt;
+      setMascotMessage(personalizedPrompt);
+      await speak(personalizedPrompt, userLanguage);
       if (!isLastCheckpoint) {
         setWaitingForResponse(true);
         setIsAdvancing(false);
       } else {
         setTimeout(() => setIsComplete(true), 1600);
       }
-      void safeSpeak(checkpoint.mascotPrompt);
     };
 
     speakAndWait();
@@ -99,40 +124,53 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
   const processResponse = useCallback(
     async (userSpeech: string) => {
       if (!checkpoint || isLastCheckpoint) return;
-      const lower = userSpeech.toLowerCase();
 
-      // For destination (first checkpoint), accept any multi-word answer
-      const isAccepted =
-        checkpoint.id === "greeting"
-          ? lower.trim().length > 2
-          : checkpoint.keywords.some((kw) => lower.includes(kw));
+      flushSync(() => setIsAnalyzing(true));
+      const result = await analyzeCheckpointWithAgent(checkpoint, userSpeech, effectiveProfile, selectedMode);
+      setIsAnalyzing(false);
 
-      if (isAccepted) {
+      if (result.coachingTip) {
+        setCoachingTip(result.coachingTip);
+      }
+
+      if (result.accepted) {
         setShowHint(false);
         setWaitingForResponse(false);
-        setMascotMessage(checkpoint.successResponse);
-        await speak(checkpoint.successResponse);
+        setIsAdvancing(true);
+
+        if (checkpoint.extractField) {
+          setCapturedAnswers((prev) => ({
+            ...prev,
+            [checkpoint.extractField!]: result.extractedValue || userSpeech,
+          }));
+        }
+
+        setMascotMessage(result.feedback);
+        await speak(result.feedback, userLanguage);
+
         setTimeout(() => {
           setCurrentIndex((prev) => prev + 1);
-        }, 800);
+        }, 700);
       } else {
-        setMascotMessage(checkpoint.hintPrompt);
-        await speak(checkpoint.hintPrompt);
+        setMascotMessage(result.feedback || checkpoint.hintPrompt);
+        await speak(result.feedback || checkpoint.hintPrompt, userLanguage);
         setWaitingForResponse(true);
       }
     },
-    [checkpoint, isLastCheckpoint, speak]
+    [checkpoint, effectiveProfile, isLastCheckpoint, selectedMode, speak, userLanguage]
   );
 
   useEffect(() => {
-    if (!isListening && transcript && waitingForResponse) {
-      processResponse(transcript);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isListening]);
+    const cleaned = transcript.trim();
+    if (!cleaned) return;
+    if (!waitingForResponse || isAnalyzing || isTranscribing || isListening) return;
+    if (cleaned === lastProcessedTranscriptRef.current) return;
+
+    lastProcessedTranscriptRef.current = cleaned;
+    processResponse(cleaned);
+  }, [isAnalyzing, isListening, isTranscribing, processResponse, transcript, waitingForResponse]);
 
   const handleMicToggle = () => {
-    if (mode !== "voice") return;
     if (isListening) {
       stopListening();
     } else {
@@ -162,11 +200,11 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
         .filter(Boolean)
         .join(" ");
       processResponse(selectedMessage);
+      setAacStrip([]);
       return;
     }
-
     setMascotMessage(checkpoint.hintPrompt);
-    void safeSpeak(checkpoint.hintPrompt);
+    void speak(checkpoint.hintPrompt, userLanguage);
     setWaitingForResponse(true);
   };
 
@@ -175,6 +213,9 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
     stopSpeaking();
     setCurrentIndex(0);
     setIsComplete(false);
+    setCapturedAnswers({});
+    setCoachingTip("");
+    setAacStrip([]);
     resetTranscript();
   };
 
@@ -197,8 +238,14 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
           Check-in Complete!
         </h2>
         <p className="text-lg text-muted-foreground mb-8">
-          You successfully completed the airport check-in! Great communication skills!
+          Nice work, {profile?.name || "traveler"}. You completed this guided airport check-in.
         </p>
+        <div className="mb-8 bg-card border-2 border-border rounded-xl p-4 text-left">
+          <p className="text-sm font-semibold text-muted-foreground mb-2">Session summary</p>
+          <p className="text-foreground text-sm">Destination: {capturedAnswers.destination || "Not captured"}</p>
+          <p className="text-foreground text-sm">Passengers: {capturedAnswers.passengers || "Not captured"}</p>
+          <p className="text-foreground text-sm">Luggage: {capturedAnswers.luggage || "Not captured"}</p>
+        </div>
         <div className="flex items-center justify-center gap-2 mb-8">
           {[...Array(3)].map((_, i) => (
             <motion.div
@@ -243,7 +290,7 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
         </Button>
         <div className="flex-1">
           <h2 className="font-display text-xl font-bold text-foreground">
-            ✈️ Airport Check-in
+            ✈️ Airport Check-in {mode === "aac" ? "(AAC Mode)" : "(Voice Mode)"}
           </h2>
           <p className="text-sm text-muted-foreground">
             Step {currentIndex + 1} of {airportCheckInScenario.length}
@@ -253,6 +300,7 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
 
       <Progress value={progress} className="mb-4 h-3" />
 
+      {/* AI mode selector */}
       <div className="mb-6 rounded-xl border bg-card p-3">
         <p className="text-sm font-medium mb-2">Conversation mode</p>
         <div className="flex gap-2">
@@ -283,12 +331,12 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Left: Camera + Mic */}
+        {/* Left: input area */}
         <div className="space-y-4">
           {mode === "voice" && <CameraFeed />}
 
-          {/* Mic button */}
-          {waitingForResponse && (
+          {/* Voice mic button */}
+          {mode === "voice" && waitingForResponse && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
               <Button
                 size="xl"
@@ -298,13 +346,9 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
                 disabled={!isSupported || isSpeaking || isAnalyzing || isTranscribing}
               >
                 {isListening ? (
-                  <>
-                    <MicOff className="w-6 h-6" /> Stop Recording
-                  </>
+                  <><MicOff className="w-6 h-6" /> Stop Recording</>
                 ) : (
-                  <>
-                    <Mic className="w-6 h-6" /> Tap to Speak
-                  </>
+                  <><Mic className="w-6 h-6" /> Tap to Speak</>
                 )}
               </Button>
               {!isSupported && (
@@ -318,7 +362,50 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
             </motion.div>
           )}
 
-          {/* Transcript */}
+          {/* AAC picture cards */}
+          {mode === "aac" && waitingForResponse && (
+            <div className="space-y-3">
+              {/* AAC strip (selected cards) */}
+              <div className="min-h-14 bg-muted rounded-xl p-2 flex flex-wrap gap-2 items-center">
+                {aacStrip.length === 0 ? (
+                  <p className="text-xs text-muted-foreground px-2">Tap cards below to build your response</p>
+                ) : (
+                  aacStrip.map((cardId) => {
+                    const card = getCardById(cardId);
+                    return card ? (
+                      <span key={cardId} className="bg-card border rounded-lg px-2 py-1 text-sm flex items-center gap-1">
+                        <span>{card.emoji}</span> {card.label}
+                      </span>
+                    ) : null;
+                  })
+                )}
+              </div>
+              {/* Card grid */}
+              <div className="grid grid-cols-4 gap-2">
+                {availableCards.map((card) => (
+                  <button
+                    key={card.id}
+                    onClick={() => handleAacCardSelect(card.id)}
+                    className="flex flex-col items-center gap-1 rounded-xl border bg-card p-2 hover:border-primary transition-colors text-center"
+                  >
+                    <span className="text-2xl">{card.emoji}</span>
+                    <span className="text-xs text-foreground leading-tight">{card.label}</span>
+                  </button>
+                ))}
+              </div>
+              {/* AAC actions */}
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleAacUndo} disabled={aacStrip.length === 0}>
+                  Undo
+                </Button>
+                <Button variant="accent" size="sm" onClick={handleAacSend} disabled={aacStrip.length === 0 || isAdvancing}>
+                  Send
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Transcript (voice mode) */}
           {transcript && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -329,8 +416,21 @@ const AirportCheckIn = ({ onBack }: AirportCheckInProps) => {
               <p className="text-foreground text-lg">"{transcript}"</p>
             </motion.div>
           )}
+
+          {isAnalyzing && (
+            <div className="bg-muted border rounded-xl p-3 flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" /> AI agent is analyzing your response...
+            </div>
+          )}
+
+          {isTranscribing && (
+            <div className="bg-muted border rounded-xl p-3 flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" /> Transcribing speech with Whisper...
+            </div>
+          )}
         </div>
 
+        {/* Right: mascot + hints */}
         <div className="flex flex-col items-center justify-center gap-6">
           <MascotAvatar isSpeaking={isSpeaking} message={mascotMessage} />
 
