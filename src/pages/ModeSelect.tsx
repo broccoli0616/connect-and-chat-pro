@@ -59,7 +59,6 @@ const ModeSelect = ({ onSelectSingle, onSelectMulti, onBack }: ModeSelectProps) 
                 <div>
                   <h2 className="font-display text-xl font-bold text-foreground">Multiplayer</h2>
                   <p className="text-muted-foreground">Practise with a partner and switch turns in shared prompts</p>
-                  <span className="text-xs font-semibold text-accent">Demo lobby</span>
                 </div>
               </CardContent>
             </Card>
