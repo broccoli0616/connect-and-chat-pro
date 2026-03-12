@@ -117,8 +117,7 @@ Production deployment is hosted on Vercel:
 
 ## Project Poster
 
-[View Poster](./src/assets/commpractice_poster%20%281%29.png)
-
+![CommPractice Project Poster](./src/assets/commpractice_poster%20%281%29.png)
 ## Team
 
 - Li Xuanming
