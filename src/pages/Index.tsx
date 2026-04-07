@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { scenarios, Scenario, categoryInfo } from "@/data/scenarios";
 import ScenarioCard from "@/components/ScenarioCard";
@@ -10,7 +10,7 @@ import ModeSelect from "@/pages/ModeSelect";
 import MultiplayerLobby from "@/pages/MultiplayerLobby";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getProfile, clearProfile } from "@/lib/userProfile";
+import { useAuth } from "@/hooks/useAuth";
 import { LogOut, Plane, MessageSquareText } from "lucide-react";
 import heroIllustration from "@/assets/hero-illustration.png";
 
@@ -26,45 +26,51 @@ type AppView =
   | "multiplayer-lobby";
 
 const Index = () => {
+  const { profile, loading, signOut } = useAuth();
+
   const [view, setView] = useState<AppView>("onboarding");
   const [activeScenario, setActiveScenario] = useState<Scenario | null>(null);
   const [filter, setFilter] = useState<CategoryFilter>("all");
 
-  useEffect(() => {
-    const profile = getProfile();
-    if (profile) {
-      setView(profile.role === "therapist" ? "therapist-dashboard" : "mode-select");
-    }
-  }, []);
+  // Sync view when auth state resolves
+  if (!loading && profile && view === "onboarding") {
+    const nextView = profile.role === "therapist" ? "therapist-dashboard" : "mode-select";
+    setView(nextView);
+  }
 
-  const handleLogout = () => {
-    clearProfile();
+  const handleLogout = async () => {
+    await signOut();
     setView("onboarding");
   };
 
   const filteredScenarios =
     filter === "all" ? scenarios : scenarios.filter((s) => s.category === filter);
 
-  if (view === "onboarding") {
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  if (view === "onboarding" || !profile) {
     return (
       <Onboarding
         onComplete={() => {
-          const profile = getProfile();
-          setView(profile?.role === "therapist" ? "therapist-dashboard" : "mode-select");
+          // Auth state change from AuthProvider will set profile,
+          // which triggers the sync logic above on next render.
         }}
       />
     );
   }
 
   if (view === "therapist-dashboard") {
-    const therapistProfile = getProfile();
-
-    if (!therapistProfile || therapistProfile.role !== "therapist") {
+    if (profile.role !== "therapist") {
       setView("onboarding");
       return null;
     }
-
-    return <TherapistDashboard profile={therapistProfile} onBack={handleLogout} />;
+    return <TherapistDashboard onBack={handleLogout} />;
   }
 
   if (view === "mode-select") {
@@ -116,8 +122,6 @@ const Index = () => {
     );
   }
 
-  const profile = getProfile();
-
   return (
     <div className="min-h-screen bg-background">
       {/* Hero */}
@@ -125,7 +129,7 @@ const Index = () => {
         <div className="max-w-6xl mx-auto px-4 py-12 md:py-16">
           <div className="absolute top-4 right-4">
             <Button variant="ghost" size="sm" onClick={handleLogout}>
-              <LogOut className="w-4 h-4" /> {profile?.name}
+              <LogOut className="w-4 h-4" /> {profile.name}
             </Button>
           </div>
           <div className="flex flex-col md:flex-row items-center gap-8">
@@ -148,7 +152,7 @@ const Index = () => {
                 variant="accent"
                 onClick={() => setView("airport-checkin")}
               >
-                Try Airport Check-in ✈️
+                Try Airport Check-in
               </Button>
             </motion.div>
             <motion.div

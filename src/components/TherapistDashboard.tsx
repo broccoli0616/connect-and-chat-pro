@@ -1,65 +1,47 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { UserProfile } from "@/lib/userProfile";
-import { Activity, ArrowLeft, ClipboardList, TrendingUp, Users } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { useTherapistDashboard } from "@/hooks/useTherapistDashboard";
+import { addLearnerByEmail } from "@/lib/therapistData";
+import { Activity, ArrowLeft, ClipboardList, TrendingUp, Users, UserPlus } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 
 interface TherapistDashboardProps {
-  profile: UserProfile;
   onBack: () => void;
 }
 
-const learners = [
-  {
-    id: "learner-001",
-    name: "Mia Chen",
-    supportNeed: "Speech clarity",
-    completedSessions: 18,
-    weeklyGoal: 24,
-    confidenceScore: 76,
-    pronunciationScore: 82,
-    consistencyScore: 71,
-    currentScenario: "Airport Check-in",
-    lastActive: "Today, 10:20 AM",
-    notes: "Responds well to short prompts. Needs repetition support under pressure.",
-  },
-  {
-    id: "learner-002",
-    name: "Noah Lin",
-    supportNeed: "Conversation pacing",
-    completedSessions: 11,
-    weeklyGoal: 15,
-    confidenceScore: 68,
-    pronunciationScore: 74,
-    consistencyScore: 80,
-    currentScenario: "Asking for Help",
-    lastActive: "Yesterday",
-    notes: "Improving on turn-taking. Hesitates when instructions change.",
-  },
-  {
-    id: "learner-003",
-    name: "Sofia Zhang",
-    supportNeed: "Vocabulary recall",
-    completedSessions: 9,
-    weeklyGoal: 12,
-    confidenceScore: 84,
-    pronunciationScore: 79,
-    consistencyScore: 88,
-    currentScenario: "Ordering Food",
-    lastActive: "2 days ago",
-    notes: "Strong confidence. Next target is faster word retrieval.",
-  },
-];
+const TherapistDashboard = ({ onBack }: TherapistDashboardProps) => {
+  const { profile, user } = useAuth();
+  const { data: learners = [], isLoading, refetch } = useTherapistDashboard(user?.id);
+  const [addLearnerName, setAddLearnerName] = useState("");
+  const [addError, setAddError] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
 
-const TherapistDashboard = ({ profile, onBack }: TherapistDashboardProps) => {
   const totalLearners = learners.length;
-  const totalSessions = learners.reduce((sum, learner) => sum + learner.completedSessions, 0);
-  const averageConfidence = Math.round(
-    learners.reduce((sum, learner) => sum + learner.confidenceScore, 0) / totalLearners
-  );
-  const averagePronunciation = Math.round(
-    learners.reduce((sum, learner) => sum + learner.pronunciationScore, 0) / totalLearners
-  );
+  const totalSessions = learners.reduce((sum, l) => sum + l.completedSessions, 0);
+  const averageAcceptance = totalLearners > 0
+    ? Math.round(learners.reduce((sum, l) => sum + l.acceptanceRate, 0) / totalLearners)
+    : 0;
+
+  const handleAddLearner = async () => {
+    if (!user || !addLearnerName.trim()) return;
+    setIsAdding(true);
+    setAddError("");
+
+    const { error } = await addLearnerByEmail(user.id, addLearnerName.trim());
+    setIsAdding(false);
+
+    if (error) {
+      setAddError(error);
+      return;
+    }
+
+    setAddLearnerName("");
+    refetch();
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -71,13 +53,12 @@ const TherapistDashboard = ({ profile, onBack }: TherapistDashboardProps) => {
               Learner Progress Overview
             </h1>
             <p className="text-muted-foreground mt-2 max-w-2xl">
-              Track engagement, confidence, and current scenario focus for your learners.
-              This page uses dummy data for now.
+              Track engagement and session progress for your learners.
             </p>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold text-foreground">{profile.name}</p>
+              <p className="text-sm font-semibold text-foreground">{profile?.name}</p>
               <p className="text-sm text-muted-foreground">Therapist account</p>
             </div>
             <Button variant="outline" onClick={onBack}>
@@ -102,7 +83,7 @@ const TherapistDashboard = ({ profile, onBack }: TherapistDashboardProps) => {
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <ClipboardList className="w-5 h-5 text-accent" />
-                <span className="text-xs font-semibold text-muted-foreground">This month</span>
+                <span className="text-xs font-semibold text-muted-foreground">Total</span>
               </div>
               <p className="text-3xl font-bold text-foreground">{totalSessions}</p>
               <p className="text-sm text-muted-foreground mt-1">Completed sessions</p>
@@ -115,8 +96,8 @@ const TherapistDashboard = ({ profile, onBack }: TherapistDashboardProps) => {
                 <TrendingUp className="w-5 h-5 text-primary" />
                 <span className="text-xs font-semibold text-muted-foreground">Average</span>
               </div>
-              <p className="text-3xl font-bold text-foreground">{averageConfidence}%</p>
-              <p className="text-sm text-muted-foreground mt-1">Confidence score</p>
+              <p className="text-3xl font-bold text-foreground">{averageAcceptance}%</p>
+              <p className="text-sm text-muted-foreground mt-1">Acceptance rate</p>
             </CardContent>
           </Card>
 
@@ -124,10 +105,10 @@ const TherapistDashboard = ({ profile, onBack }: TherapistDashboardProps) => {
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <Activity className="w-5 h-5 text-accent" />
-                <span className="text-xs font-semibold text-muted-foreground">Average</span>
+                <span className="text-xs font-semibold text-muted-foreground">Roster</span>
               </div>
-              <p className="text-3xl font-bold text-foreground">{averagePronunciation}%</p>
-              <p className="text-sm text-muted-foreground mt-1">Pronunciation score</p>
+              <p className="text-3xl font-bold text-foreground">{totalLearners}</p>
+              <p className="text-sm text-muted-foreground mt-1">Linked learners</p>
             </CardContent>
           </Card>
         </div>
@@ -138,25 +119,40 @@ const TherapistDashboard = ({ profile, onBack }: TherapistDashboardProps) => {
               <CardTitle className="font-display text-2xl">Learner Snapshot</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {learners.map((learner) => {
-                const goalProgress = Math.min(
-                  100,
-                  Math.round((learner.completedSessions / learner.weeklyGoal) * 100)
-                );
+              {isLoading && (
+                <p className="text-sm text-muted-foreground">Loading learner data...</p>
+              )}
+
+              {!isLoading && learners.length === 0 && (
+                <div className="text-center py-8">
+                  <Users className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
+                  <p className="text-foreground font-semibold mb-1">No learners yet</p>
+                  <p className="text-sm text-muted-foreground">
+                    Add a learner by name using the panel on the right.
+                  </p>
+                </div>
+              )}
+
+              {learners.map((entry) => {
+                const goalProgress = entry.weeklyGoal > 0
+                  ? Math.min(100, Math.round((entry.completedSessions / entry.weeklyGoal) * 100))
+                  : 0;
 
                 return (
-                  <div key={learner.id} className="rounded-2xl border border-border p-4">
+                  <div key={entry.learner.id} className="rounded-2xl border border-border p-4">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="space-y-2 max-w-xl">
                         <div>
-                          <h3 className="text-lg font-semibold text-foreground">{learner.name}</h3>
+                          <h3 className="text-lg font-semibold text-foreground">{entry.learner.name}</h3>
                           <p className="text-sm text-muted-foreground">
-                            Focus: {learner.supportNeed} · Current scenario: {learner.currentScenario}
+                            {entry.supportNeed ? `Focus: ${entry.supportNeed}` : "No support need set"}
                           </p>
                         </div>
-                        <p className="text-sm text-muted-foreground">{learner.notes}</p>
+                        {entry.notes && <p className="text-sm text-muted-foreground">{entry.notes}</p>}
                         <p className="text-xs font-medium text-muted-foreground">
-                          Last active: {learner.lastActive}
+                          Last active: {entry.lastActive
+                            ? formatDistanceToNow(new Date(entry.lastActive), { addSuffix: true })
+                            : "Never"}
                         </p>
                       </div>
 
@@ -165,7 +161,7 @@ const TherapistDashboard = ({ profile, onBack }: TherapistDashboardProps) => {
                           <div className="flex items-center justify-between text-sm mb-1">
                             <span className="text-muted-foreground">Weekly target</span>
                             <span className="font-semibold text-foreground">
-                              {learner.completedSessions}/{learner.weeklyGoal}
+                              {entry.completedSessions}/{entry.weeklyGoal}
                             </span>
                           </div>
                           <Progress value={goalProgress} className="h-2" />
@@ -173,32 +169,21 @@ const TherapistDashboard = ({ profile, onBack }: TherapistDashboardProps) => {
 
                         <div>
                           <div className="flex items-center justify-between text-sm mb-1">
-                            <span className="text-muted-foreground">Confidence</span>
+                            <span className="text-muted-foreground">Acceptance rate</span>
                             <span className="font-semibold text-foreground">
-                              {learner.confidenceScore}%
+                              {entry.acceptanceRate}%
                             </span>
                           </div>
-                          <Progress value={learner.confidenceScore} className="h-2" />
+                          <Progress value={entry.acceptanceRate} className="h-2" />
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between text-sm mb-1">
-                            <span className="text-muted-foreground">Pronunciation</span>
+                            <span className="text-muted-foreground">Total sessions</span>
                             <span className="font-semibold text-foreground">
-                              {learner.pronunciationScore}%
+                              {entry.totalSessions}
                             </span>
                           </div>
-                          <Progress value={learner.pronunciationScore} className="h-2" />
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between text-sm mb-1">
-                            <span className="text-muted-foreground">Consistency</span>
-                            <span className="font-semibold text-foreground">
-                              {learner.consistencyScore}%
-                            </span>
-                          </div>
-                          <Progress value={learner.consistencyScore} className="h-2" />
                         </div>
                       </div>
                     </div>
@@ -211,28 +196,40 @@ const TherapistDashboard = ({ profile, onBack }: TherapistDashboardProps) => {
           <div className="space-y-6">
             <Card>
               <CardHeader className="pb-4">
-                <CardTitle className="font-display text-2xl">Highlights</CardTitle>
+                <CardTitle className="font-display text-2xl flex items-center gap-2">
+                  <UserPlus className="w-5 h-5" /> Add Learner
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4 text-sm text-muted-foreground">
-                <div className="rounded-xl bg-primary/5 p-4 border border-primary/10">
-                  <p className="font-semibold text-foreground mb-1">Best confidence trend</p>
-                  <p>Sofia Zhang improved fastest this week and is ready for more stressful prompts.</p>
-                </div>
-                <div className="rounded-xl bg-accent/10 p-4 border border-accent/10">
-                  <p className="font-semibold text-foreground mb-1">Needs follow-up</p>
-                  <p>Noah Lin is engaged but slows down when the scenario becomes less predictable.</p>
-                </div>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Enter a learner's name to link them to your account.
+                </p>
+                <Input
+                  type="text"
+                  value={addLearnerName}
+                  onChange={(e) => setAddLearnerName(e.target.value)}
+                  placeholder="Learner name"
+                  className="h-10"
+                />
+                {addError && <p className="text-sm text-destructive">{addError}</p>}
+                <Button
+                  className="w-full"
+                  disabled={!addLearnerName.trim() || isAdding}
+                  onClick={handleAddLearner}
+                >
+                  {isAdding ? "Adding..." : "Link Learner"}
+                </Button>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="pb-4">
-                <CardTitle className="font-display text-2xl">Suggested next step</CardTitle>
+                <CardTitle className="font-display text-2xl">Getting Started</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground">
-                  Add a learner detail view next, then replace the dummy data with session results
-                  stored per user.
+                  Learner stats will appear once they complete practice sessions.
+                  Add learners by name, then track their progress here.
                 </p>
               </CardContent>
             </Card>

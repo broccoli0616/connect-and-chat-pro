@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Search, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,26 +6,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { getProfile } from "@/lib/userProfile";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 
 interface MultiplayerLobbyProps {
   onBack: () => void;
   onMatchReady: () => void;
 }
-
-interface Opponent {
-  name: string;
-  level: "Beginner" | "Intermediate";
-  rating: number;
-}
-
-const sampleOpponents: Opponent[] = [
-  { name: "Mia", level: "Beginner", rating: 720 },
-  { name: "Leo", level: "Beginner", rating: 695 },
-  { name: "Aria", level: "Intermediate", rating: 840 },
-  { name: "Noah", level: "Intermediate", rating: 815 },
-  { name: "Ivy", level: "Beginner", rating: 735 },
-];
 
 const getInitials = (name: string) =>
   name
@@ -35,51 +22,91 @@ const getInitials = (name: string) =>
     .toUpperCase();
 
 const MultiplayerLobby = ({ onBack, onMatchReady }: MultiplayerLobbyProps) => {
-  const profile = getProfile();
+  const { profile, user } = useAuth();
   const [status, setStatus] = useState<"idle" | "searching" | "matched">("idle");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [targetSeconds, setTargetSeconds] = useState(10);
-  const [opponent, setOpponent] = useState<Opponent | null>(null);
+  const [opponentName, setOpponentName] = useState<string | null>(null);
+  const [pollInterval, setPollInterval] = useState<ReturnType<typeof setInterval> | null>(null);
 
-  const onlinePlayers = useMemo(() => 28 + Math.floor(Math.random() * 12), []);
+  const searchProgress = Math.min(100, Math.round((elapsedSeconds / 15) * 100));
 
-  const searchProgress = Math.min(100, Math.round((elapsedSeconds / targetSeconds) * 100));
-
+  // Elapsed timer while searching
   useEffect(() => {
-    if (status !== "searching") {
-      return;
-    }
+    if (status !== "searching") return;
 
     const timer = setInterval(() => {
-      setElapsedSeconds((prev) => {
-        const next = prev + 1;
-
-        if (next >= targetSeconds) {
-          const randomOpponent = sampleOpponents[Math.floor(Math.random() * sampleOpponents.length)];
-          setOpponent(randomOpponent);
-          setStatus("matched");
-          return targetSeconds;
-        }
-
-        return next;
-      });
+      setElapsedSeconds((prev) => prev + 1);
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [status, targetSeconds]);
+  }, [status]);
 
-  const startMatching = () => {
-    setOpponent(null);
+  const startMatching = useCallback(async () => {
+    if (!user) return;
+    setOpponentName(null);
     setElapsedSeconds(0);
-    setTargetSeconds(8 + Math.floor(Math.random() * 6));
     setStatus("searching");
-  };
 
-  const cancelMatching = () => {
+    try {
+      // Call the matchmake edge function
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      const res = await supabase.functions.invoke("matchmake", {
+        body: { scenarioId: "airport-checkin" },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      if (res.data?.status === "matched") {
+        setOpponentName(res.data.opponentId);
+        setStatus("matched");
+        return;
+      }
+
+      // Not matched yet — poll the queue for updates
+      const interval = setInterval(async () => {
+        const pollRes = await supabase.functions.invoke("matchmake", {
+          body: { scenarioId: "airport-checkin" },
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+
+        if (pollRes.data?.status === "matched") {
+          setOpponentName(pollRes.data.opponentId);
+          setStatus("matched");
+          clearInterval(interval);
+          setPollInterval(null);
+        }
+      }, 3000);
+
+      setPollInterval(interval);
+    } catch {
+      console.warn("[MultiplayerLobby] Matchmaking failed");
+      setStatus("idle");
+    }
+  }, [user]);
+
+  const cancelMatching = useCallback(async () => {
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      setPollInterval(null);
+    }
+
+    // Remove from queue
+    if (user) {
+      await supabase.from("matchmaking_queue").delete().eq("user_id", user.id);
+    }
+
     setStatus("idle");
     setElapsedSeconds(0);
-    setOpponent(null);
-  };
+    setOpponentName(null);
+  }, [pollInterval, user]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [pollInterval]);
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 flex items-center justify-center">
@@ -99,7 +126,7 @@ const MultiplayerLobby = ({ onBack, onMatchReady }: MultiplayerLobbyProps) => {
               </div>
               <Badge variant="secondary" className="w-fit">
                 <Users className="w-3.5 h-3.5 mr-1" />
-                {onlinePlayers} players online
+                Live matchmaking
               </Badge>
             </div>
 
@@ -136,12 +163,12 @@ const MultiplayerLobby = ({ onBack, onMatchReady }: MultiplayerLobbyProps) => {
                   {status === "searching" && (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Searching...</span>
+                        <span className="text-muted-foreground">Searching... ({elapsedSeconds}s)</span>
                         <span className="font-semibold text-foreground">{searchProgress}%</span>
                       </div>
                       <Progress value={searchProgress} />
                       <p className="text-sm text-muted-foreground">
-                        Looking for a partner with a similar level. Usually takes about 10 seconds.
+                        Looking for a partner with a similar level. Checking every few seconds.
                       </p>
                       <Button className="w-full" variant="outline" onClick={cancelMatching}>
                         Cancel Search
@@ -149,7 +176,7 @@ const MultiplayerLobby = ({ onBack, onMatchReady }: MultiplayerLobbyProps) => {
                     </div>
                   )}
 
-                  {status === "matched" && opponent && (
+                  {status === "matched" && opponentName && (
                     <motion.div
                       initial={{ opacity: 0, scale: 0.97 }}
                       animate={{ opacity: 1, scale: 1 }}
@@ -159,17 +186,7 @@ const MultiplayerLobby = ({ onBack, onMatchReady }: MultiplayerLobbyProps) => {
                         <Zap className="w-5 h-5 text-success" />
                         <div>
                           <p className="font-semibold text-foreground">Match Found!</p>
-                          <p className="text-sm text-muted-foreground">You are paired with {opponent.name}</p>
-                        </div>
-                      </div>
-
-                      <div className="rounded-lg border p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="font-semibold text-foreground">{opponent.name}</p>
-                            <p className="text-sm text-muted-foreground">{opponent.level}</p>
-                          </div>
-                          <Badge variant="outline">Rating {opponent.rating}</Badge>
+                          <p className="text-sm text-muted-foreground">You have been paired with a partner</p>
                         </div>
                       </div>
 

@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { User, Users, ArrowLeft } from "lucide-react";
-import { getProfile } from "@/lib/userProfile";
+import { useAuth } from "@/hooks/useAuth";
 
 interface ModeSelectProps {
   onSelectSingle: () => void;
@@ -11,7 +11,7 @@ interface ModeSelectProps {
 }
 
 const ModeSelect = ({ onSelectSingle, onSelectMulti, onBack }: ModeSelectProps) => {
-  const profile = getProfile();
+  const { profile } = useAuth();
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
