@@ -8,8 +8,9 @@ import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import CameraFeed from "@/components/CameraFeed";
 import MascotAvatar from "@/components/MascotAvatar";
-import { getProfile } from "@/lib/userProfile";
+import { useAuth } from "@/hooks/useAuth";
 import { analyzeCheckpointWithAgent, AgentMode } from "@/lib/aiAgent";
+import { createSession, recordCheckpointResult, completeSession } from "@/lib/sessions";
 import { ArrowLeft, Mic, MicOff, Lightbulb, RotateCcw, Star, Loader2 } from "lucide-react";
 
 interface AirportCheckInProps {
@@ -18,15 +19,11 @@ interface AirportCheckInProps {
 }
 
 const AirportCheckIn = ({ onBack, mode = "voice" }: AirportCheckInProps) => {
-  const profile = getProfile();
-  const effectiveProfile = profile || {
-    name: "Traveler",
-    age: "18",
-    role: "learner" as const,
-    preferredLanguage: "en-US",
-    createdAt: new Date().toISOString(),
-  };
-  const userLanguage = profile?.preferredLanguage || "en-US";
+  const { profile, user } = useAuth();
+  const effectiveProfile = profile
+    ? { name: profile.name, age: profile.age, role: profile.role, preferredLanguage: profile.preferred_language }
+    : { name: "Traveler", age: "18", role: "learner" as const, preferredLanguage: "en-US" };
+  const userLanguage = profile?.preferred_language || "en-US";
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [mascotMessage, setMascotMessage] = useState("");
@@ -41,6 +38,7 @@ const AirportCheckIn = ({ onBack, mode = "voice" }: AirportCheckInProps) => {
   const [aacStrip, setAacStrip] = useState<string[]>([]);
   const [isAdvancing, setIsAdvancing] = useState(false);
   const lastProcessedTranscriptRef = useRef("");
+  const sessionIdRef = useRef<string | null>(null);
 
   const {
     isListening,
@@ -79,6 +77,15 @@ const AirportCheckIn = ({ onBack, mode = "voice" }: AirportCheckInProps) => {
     [checkpoint]
   );
 
+  // Create a session on first checkpoint
+  useEffect(() => {
+    if (currentIndex === 0 && user && !sessionIdRef.current) {
+      createSession(user.id, "airport-checkin", mode, selectedMode).then((id) => {
+        sessionIdRef.current = id;
+      });
+    }
+  }, [currentIndex, user, mode, selectedMode]);
+
   useEffect(() => {
     if (!checkpoint) return;
     setMascotMessage(checkpoint.mascotPrompt);
@@ -101,6 +108,9 @@ const AirportCheckIn = ({ onBack, mode = "voice" }: AirportCheckInProps) => {
         setWaitingForResponse(true);
         setIsAdvancing(false);
       } else {
+        if (sessionIdRef.current) {
+          completeSession(sessionIdRef.current);
+        }
         setTimeout(() => setIsComplete(true), 1600);
       }
     };
@@ -128,6 +138,18 @@ const AirportCheckIn = ({ onBack, mode = "voice" }: AirportCheckInProps) => {
       flushSync(() => setIsAnalyzing(true));
       const result = await analyzeCheckpointWithAgent(checkpoint, userSpeech, effectiveProfile, selectedMode);
       setIsAnalyzing(false);
+
+      // Persist checkpoint result
+      if (sessionIdRef.current) {
+        recordCheckpointResult(sessionIdRef.current, {
+          checkpointId: checkpoint.id,
+          userSpeech,
+          accepted: result.accepted,
+          feedback: result.feedback,
+          extractedValue: result.extractedValue,
+          coachingTip: result.coachingTip,
+        });
+      }
 
       if (result.coachingTip) {
         setCoachingTip(result.coachingTip);

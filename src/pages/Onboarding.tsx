@@ -3,12 +3,15 @@ import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getSavedProfiles, saveProfile, signInProfile, UserProfile } from "@/lib/userProfile";
+import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, ArrowRight, LogIn, User, UserPlus } from "lucide-react";
 
 interface OnboardingProps {
   onComplete: () => void;
 }
+
+type Role = "learner" | "therapist";
+type Language = "en-US" | "zh-CN";
 
 const roles = [
   { value: "learner" as const, label: "I'm practising", icon: "🎓" },
@@ -23,74 +26,82 @@ const languages = [
 type AuthMode = "chooser" | "sign-in" | "register";
 
 const Onboarding = ({ onComplete }: OnboardingProps) => {
+  const { signUp, signIn } = useAuth();
+
   const [authMode, setAuthMode] = useState<AuthMode>("chooser");
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
-  const [signInName, setSignInName] = useState("");
-  const [password, setPassword] = useState("");
-  const [signInError, setSignInError] = useState("");
-  const [role, setRole] = useState<UserProfile["role"] | "">("");
-  const [preferredLanguage, setPreferredLanguage] =
-    useState<UserProfile["preferredLanguage"]>("en-US");
-  const savedProfiles = getSavedProfiles();
+  const [email, setEmail] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
+  const [signInEmail, setSignInEmail] = useState("");
+  const [signInPassword, setSignInPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [role, setRole] = useState<Role | "">("");
+  const [preferredLanguage, setPreferredLanguage] = useState<Language>("en-US");
 
   const resetRegistration = () => {
     setStep(0);
     setName("");
     setAge("");
+    setEmail("");
+    setRegisterPassword("");
     setRole("");
     setPreferredLanguage("en-US");
   };
 
   const handleChooseRegister = () => {
     resetRegistration();
-    setSignInError("");
+    setAuthError("");
     setAuthMode("register");
   };
 
   const handleChooseSignIn = () => {
-    setSignInName("");
-    setPassword("");
-    setSignInError("");
+    setSignInEmail("");
+    setSignInPassword("");
+    setAuthError("");
     setAuthMode("sign-in");
   };
 
-  const handleFinish = () => {
-    if (!name || !age || !role) return;
-    saveProfile({
+  const handleFinish = async () => {
+    if (!name || !age || !role || !email || !registerPassword) return;
+    setIsSubmitting(true);
+    setAuthError("");
+
+    const { error } = await signUp(email, registerPassword, {
       name,
-      age,
+      age: parseInt(age, 10) || null,
       role,
-      preferredLanguage,
-      createdAt: new Date().toISOString(),
+      preferred_language: preferredLanguage,
     });
+
+    setIsSubmitting(false);
+
+    if (error) {
+      setAuthError(error);
+      return;
+    }
     onComplete();
   };
 
-  const handleSignIn = (profile: UserProfile) => {
-    signInProfile(profile);
+  const handleSubmitSignIn = async () => {
+    if (!signInEmail.trim() || !signInPassword.trim()) {
+      setAuthError("Enter both email and password.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setAuthError("");
+
+    const { error } = await signIn(signInEmail, signInPassword);
+    setIsSubmitting(false);
+
+    if (error) {
+      setAuthError(error);
+      return;
+    }
     onComplete();
-  };
-
-  const handleSubmitFakeSignIn = () => {
-    const normalizedName = signInName.trim().toLowerCase();
-    if (!normalizedName || !password.trim()) {
-      setSignInError("Enter both username and password.");
-      return;
-    }
-
-    const matchedProfile = savedProfiles.find(
-      (profile) => profile.name.trim().toLowerCase() === normalizedName
-    );
-
-    if (!matchedProfile) {
-      setSignInError("No saved profile matches that username. Register first or try a saved name.");
-      return;
-    }
-
-    setSignInError("");
-    handleSignIn(matchedProfile);
   };
 
   return (
@@ -109,10 +120,10 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
           </h1>
           <p className="text-muted-foreground">
             {authMode === "chooser"
-              ? "Sign in to continue or create a new profile"
+              ? "Sign in to continue or create a new account"
               : authMode === "sign-in"
-                ? "Use a fake username and password to continue"
-                : "Create your profile to get started"}
+                ? "Sign in with your email and password"
+                : "Create your account to get started"}
           </p>
         </div>
 
@@ -135,7 +146,7 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
                   <div>
                     <h2 className="font-display text-xl font-bold text-foreground">Sign In</h2>
                     <p className="text-sm text-muted-foreground">
-                      Continue with a saved local profile on this device.
+                      Continue with your existing account.
                     </p>
                   </div>
                 </CardContent>
@@ -154,18 +165,12 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
                   <div>
                     <h2 className="font-display text-xl font-bold text-foreground">Register</h2>
                     <p className="text-sm text-muted-foreground">
-                      Create a new learner or therapist profile.
+                      Create a new learner or therapist account.
                     </p>
                   </div>
                 </CardContent>
               </Card>
             </motion.div>
-
-            <p className="text-center text-sm text-muted-foreground">
-              {savedProfiles.length > 0
-                ? `${savedProfiles.length} saved profile${savedProfiles.length === 1 ? "" : "s"} found on this device.`
-                : "No saved profiles yet. Register to create your first one."}
-            </p>
           </motion.div>
         )}
 
@@ -179,12 +184,12 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
             <Card>
               <CardContent className="p-5 space-y-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-foreground">Username</label>
+                  <label className="block text-sm font-semibold text-foreground">Email</label>
                   <Input
-                    type="text"
-                    value={signInName}
-                    onChange={(e) => setSignInName(e.target.value)}
-                    placeholder="Enter your username"
+                    type="email"
+                    value={signInEmail}
+                    onChange={(e) => setSignInEmail(e.target.value)}
+                    placeholder="Enter your email"
                     className="h-12 rounded-xl"
                   />
                 </div>
@@ -193,45 +198,31 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
                   <label className="block text-sm font-semibold text-foreground">Password</label>
                   <Input
                     type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    value={signInPassword}
+                    onChange={(e) => setSignInPassword(e.target.value)}
                     placeholder="Enter your password"
                     className="h-12 rounded-xl"
                   />
                 </div>
 
-                {signInError && <p className="text-sm text-destructive">{signInError}</p>}
+                {authError && <p className="text-sm text-destructive">{authError}</p>}
 
                 <Button
                   variant="accent"
                   className="w-full"
-                  disabled={!signInName.trim() || !password.trim()}
-                  onClick={handleSubmitFakeSignIn}
+                  disabled={!signInEmail.trim() || !signInPassword.trim() || isSubmitting}
+                  onClick={handleSubmitSignIn}
                 >
-                  Sign In
+                  {isSubmitting ? "Signing in..." : "Sign In"}
                 </Button>
               </CardContent>
             </Card>
-
-            {savedProfiles.length === 0 && (
-              <Card>
-                <CardContent className="p-5 text-center space-y-3">
-                  <p className="text-foreground font-semibold">No saved profiles found</p>
-                  <p className="text-sm text-muted-foreground">
-                    Register a new profile first, then sign in with that username.
-                  </p>
-                  <Button variant="accent" onClick={handleChooseRegister}>
-                    Create Profile
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
 
             <Button
               variant="ghost"
               className="w-full"
               onClick={() => {
-                setSignInError("");
+                setAuthError("");
                 setAuthMode("chooser");
               }}
             >
@@ -324,8 +315,43 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
               <Button type="button" variant="ghost" className="flex-1" onClick={() => setStep(1)}>
                 <ArrowLeft className="w-4 h-4" /> Back
               </Button>
-              <Button size="lg" variant="accent" className="flex-1" disabled={!role} onClick={handleFinish}>
-                Get Started
+              <Button size="lg" className="flex-1" disabled={!role} onClick={() => setStep(3)}>
+                Next <ArrowRight className="w-5 h-5" />
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {authMode === "register" && step === 3 && (
+          <motion.div key="credentials" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+            <label className="block text-sm font-semibold text-foreground">Create your account</label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email address"
+              className="h-14 rounded-xl border-2 border-border bg-card px-4 text-lg"
+            />
+            <Input
+              type="password"
+              value={registerPassword}
+              onChange={(e) => setRegisterPassword(e.target.value)}
+              placeholder="Password (min 6 characters)"
+              className="h-14 rounded-xl border-2 border-border bg-card px-4 text-lg"
+            />
+            {authError && <p className="text-sm text-destructive">{authError}</p>}
+            <div className="flex gap-3">
+              <Button type="button" variant="ghost" className="flex-1" onClick={() => setStep(2)}>
+                <ArrowLeft className="w-4 h-4" /> Back
+              </Button>
+              <Button
+                size="lg"
+                variant="accent"
+                className="flex-1"
+                disabled={!email.trim() || !registerPassword.trim() || isSubmitting}
+                onClick={handleFinish}
+              >
+                {isSubmitting ? "Creating..." : "Get Started"}
               </Button>
             </div>
           </motion.div>
@@ -333,7 +359,7 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
 
         {authMode === "register" && (
           <div className="flex justify-center gap-2 mt-6">
-            {[0, 1, 2].map((i) => (
+            {[0, 1, 2, 3].map((i) => (
               <div key={i} className={`w-3 h-3 rounded-full ${i === step ? "bg-primary" : "bg-border"}`} />
             ))}
           </div>
