@@ -26,7 +26,7 @@ const languages = [
 type AuthMode = "chooser" | "sign-in" | "register";
 
 const Onboarding = ({ onComplete }: OnboardingProps) => {
-  const { signUp, signIn } = useAuth();
+  const { signUp, signIn, isOfflineMode, offlineSignIn } = useAuth();
 
   const [authMode, setAuthMode] = useState<AuthMode>("chooser");
   const [step, setStep] = useState(0);
@@ -40,6 +40,9 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [role, setRole] = useState<Role | "">("");
   const [preferredLanguage, setPreferredLanguage] = useState<Language>("en-US");
+
+  // In offline mode, registration has 3 steps (no email/password step)
+  const totalRegisterSteps = isOfflineMode ? 3 : 4;
 
   const resetRegistration = () => {
     setStep(0);
@@ -64,7 +67,13 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
     setAuthMode("sign-in");
   };
 
-  const handleFinish = async () => {
+  const handleFinishOffline = () => {
+    if (!name || !age || !role) return;
+    offlineSignIn({ name, age, role, preferredLanguage });
+    onComplete();
+  };
+
+  const handleFinishOnline = async () => {
     if (!name || !age || !role || !email || !registerPassword) return;
     setIsSubmitting(true);
     setAuthError("");
@@ -120,10 +129,14 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
           </h1>
           <p className="text-muted-foreground">
             {authMode === "chooser"
-              ? "Sign in to continue or create a new account"
+              ? isOfflineMode
+                ? "Sign in to continue or create a new profile"
+                : "Sign in to continue or create a new account"
               : authMode === "sign-in"
-                ? "Sign in with your email and password"
-                : "Create your account to get started"}
+                ? isOfflineMode
+                  ? "Use a username and password to continue"
+                  : "Sign in with your email and password"
+                : "Create your profile to get started"}
           </p>
         </div>
 
@@ -134,24 +147,26 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-4"
           >
-            <motion.div whileTap={{ scale: 0.98 }}>
-              <Card
-                className="cursor-pointer border-2 hover:border-primary transition-colors"
-                onClick={handleChooseSignIn}
-              >
-                <CardContent className="p-5 flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <LogIn className="w-7 h-7 text-primary" />
-                  </div>
-                  <div>
-                    <h2 className="font-display text-xl font-bold text-foreground">Sign In</h2>
-                    <p className="text-sm text-muted-foreground">
-                      Continue with your existing account.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
+            {!isOfflineMode && (
+              <motion.div whileTap={{ scale: 0.98 }}>
+                <Card
+                  className="cursor-pointer border-2 hover:border-primary transition-colors"
+                  onClick={handleChooseSignIn}
+                >
+                  <CardContent className="p-5 flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <LogIn className="w-7 h-7 text-primary" />
+                    </div>
+                    <div>
+                      <h2 className="font-display text-xl font-bold text-foreground">Sign In</h2>
+                      <p className="text-sm text-muted-foreground">
+                        Continue with your existing account.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
 
             <motion.div whileTap={{ scale: 0.98 }}>
               <Card
@@ -163,9 +178,11 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
                     <UserPlus className="w-7 h-7 text-accent" />
                   </div>
                   <div>
-                    <h2 className="font-display text-xl font-bold text-foreground">Register</h2>
+                    <h2 className="font-display text-xl font-bold text-foreground">
+                      {isOfflineMode ? "Get Started" : "Register"}
+                    </h2>
                     <p className="text-sm text-muted-foreground">
-                      Create a new learner or therapist account.
+                      Create a new learner or therapist profile.
                     </p>
                   </div>
                 </CardContent>
@@ -174,7 +191,7 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
           </motion.div>
         )}
 
-        {authMode === "sign-in" && (
+        {authMode === "sign-in" && !isOfflineMode && (
           <motion.div
             key="sign-in"
             initial={{ opacity: 0, x: 20 }}
@@ -231,6 +248,7 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
           </motion.div>
         )}
 
+        {/* Step 0: Name */}
         {authMode === "register" && step === 0 && (
           <motion.div key="name" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
             <label className="block text-sm font-semibold text-foreground">What's your name?</label>
@@ -252,6 +270,7 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
           </motion.div>
         )}
 
+        {/* Step 1: Age */}
         {authMode === "register" && step === 1 && (
           <motion.div key="age" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
             <label className="block text-sm font-semibold text-foreground">How old are you?</label>
@@ -275,6 +294,7 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
           </motion.div>
         )}
 
+        {/* Step 2: Role + Language */}
         {authMode === "register" && step === 2 && (
           <motion.div key="role" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
             <label className="block text-sm font-semibold text-foreground">What best describes you?</label>
@@ -315,14 +335,21 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
               <Button type="button" variant="ghost" className="flex-1" onClick={() => setStep(1)}>
                 <ArrowLeft className="w-4 h-4" /> Back
               </Button>
-              <Button size="lg" className="flex-1" disabled={!role} onClick={() => setStep(3)}>
-                Next <ArrowRight className="w-5 h-5" />
-              </Button>
+              {isOfflineMode ? (
+                <Button size="lg" variant="accent" className="flex-1" disabled={!role} onClick={handleFinishOffline}>
+                  Get Started
+                </Button>
+              ) : (
+                <Button size="lg" className="flex-1" disabled={!role} onClick={() => setStep(3)}>
+                  Next <ArrowRight className="w-5 h-5" />
+                </Button>
+              )}
             </div>
           </motion.div>
         )}
 
-        {authMode === "register" && step === 3 && (
+        {/* Step 3: Email + Password (online only) */}
+        {authMode === "register" && step === 3 && !isOfflineMode && (
           <motion.div key="credentials" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
             <label className="block text-sm font-semibold text-foreground">Create your account</label>
             <Input
@@ -349,7 +376,7 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
                 variant="accent"
                 className="flex-1"
                 disabled={!email.trim() || !registerPassword.trim() || isSubmitting}
-                onClick={handleFinish}
+                onClick={handleFinishOnline}
               >
                 {isSubmitting ? "Creating..." : "Get Started"}
               </Button>
@@ -359,7 +386,7 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
 
         {authMode === "register" && (
           <div className="flex justify-center gap-2 mt-6">
-            {[0, 1, 2, 3].map((i) => (
+            {Array.from({ length: totalRegisterSteps }, (_, i) => (
               <div key={i} className={`w-3 h-3 rounded-full ${i === step ? "bg-primary" : "bg-border"}`} />
             ))}
           </div>
