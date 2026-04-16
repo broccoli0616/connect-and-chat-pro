@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { saveProfile, UserProfile } from "@/lib/userProfile";
 import { User, ArrowRight, ArrowLeft } from "lucide-react";
 import { auth, db } from "@/firebase";
@@ -17,13 +18,6 @@ const roles = [
   { value: "therapist" as const, label: "I'm a therapist", icon: "💼" },
 ];
 
-const languages = [
-  { value: "en-US" as const, label: "English" },
-  { value: "zh-CN" as const, label: "Chinese (Simplified)" },
-];
-
-type AuthMode = "chooser" | "sign-in" | "register";
-
 const Onboarding = ({ onComplete }: OnboardingProps) => {
   const [view, setView] = useState<"initial" | "login" | "register">("initial");
   const [step, setStep] = useState(0);
@@ -31,12 +25,9 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
   // Form State
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
-  const [signInName, setSignInName] = useState("");
   const [password, setPassword] = useState("");
-  const [signInError, setSignInError] = useState("");
   const [role, setRole] = useState<UserProfile["role"] | "">("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   
   // Status State
   const [isLoading, setIsLoading] = useState(false);
@@ -95,26 +86,6 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
       setError(err.message);
       setIsLoading(false);
     }
-  };
-
-  const handleSubmitFakeSignIn = () => {
-    const normalizedName = signInName.trim().toLowerCase();
-    if (!normalizedName || !password.trim()) {
-      setSignInError("Enter both username and password.");
-      return;
-    }
-
-    const matchedProfile = savedProfiles.find(
-      (profile) => profile.name.trim().toLowerCase() === normalizedName
-    );
-
-    if (!matchedProfile) {
-      setSignInError("No saved profile matches that username. Register first or try a saved name.");
-      return;
-    }
-
-    setSignInError("");
-    handleSignIn(matchedProfile);
   };
 
   return (
