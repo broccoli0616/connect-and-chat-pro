@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { scenarios } from "@/data/scenarios";
+import { scenarios, type Scenario } from "@/data/scenarios";
 import AirportCheckIn from "@/components/AirportCheckIn";
 import TherapistDashboard from "@/components/TherapistDashboard";
 import Onboarding from "@/pages/Onboarding";
@@ -24,12 +24,25 @@ import { LogOut } from "lucide-react";
 import heroIllustration from "@/assets/hero-illustration.png";
 
 type CategoryFilter = "all" | "food" | "help" | "shopping" | "social";
-type AppView = "onboarding" | "mode-select" | "home" | "scenario" | "airport-checkin" | "multiplayer-lobby" | "multiplayer-room" | "post-match-feedback";
+type PracticeMode = "airport-voice" | "airport-aac";
+type AppView =
+  | "onboarding"
+  | "mode-select"
+  | "home"
+  | "scenario"
+  | "airport-checkin"
+  | "airport-checkin-aac"
+  | "multiplayer-lobby"
+  | "multiplayer-room"
+  | "post-match-feedback"
+  | "therapist-dashboard";
 
 const Index = () => {
   const [view, setView] = useState<AppView>("onboarding");
   const [activeScenario, setActiveScenario] = useState<Scenario | null>(null);
   const [filter, setFilter] = useState<CategoryFilter>("all");
+  const [selectedMode, setSelectedMode] = useState<PracticeMode>("airport-voice");
+  const [selectedScenarioId, setSelectedScenarioId] = useState("airport-checkin");
   
   // NEW: State to remember which room they were just in!
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
