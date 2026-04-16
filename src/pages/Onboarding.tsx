@@ -106,6 +106,26 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
     }
   };
 
+  const handleSubmitFakeSignIn = () => {
+    const normalizedName = signInName.trim().toLowerCase();
+    if (!normalizedName || !password.trim()) {
+      setSignInError("Enter both username and password.");
+      return;
+    }
+
+    const matchedProfile = savedProfiles.find(
+      (profile) => profile.name.trim().toLowerCase() === normalizedName
+    );
+
+    if (!matchedProfile) {
+      setSignInError("No saved profile matches that username. Register first or try a saved name.");
+      return;
+    }
+
+    setSignInError("");
+    handleSignIn(matchedProfile);
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <motion.div
