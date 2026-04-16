@@ -117,7 +117,7 @@ const Index = () => {
   }
 
   if (view === "multiplayer-room") {
-    return <MultiplayerRoom onLeave={() => setView("post-match-feedback")} />;
+    return <MultiplayerRoom roomId={activeRoomId!} onLeave={() => setView("post-match-feedback")} />;
   }
 
   if (view === "post-match-feedback") {

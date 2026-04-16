@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { PhoneOff, Mic, MicOff, Video, VideoOff, User } from "lucide-react";
+import { PhoneOff, Mic, MicOff, Video, VideoOff, User, Loader2 } from "lucide-react";
 import { getProfile } from "@/lib/userProfile";
+import { useWebRTC } from "@/hooks/useWebRTC";
 
 const TOPIC_POOL = [
   "Ordering your favourite coffee at a busy cafe.",
@@ -14,28 +15,30 @@ const TOPIC_POOL = [
 ];
 
 interface MultiplayerRoomProps {
+  roomId: string;
   onLeave: () => void;
 }
 
-export default function MultiplayerRoom({ onLeave }: MultiplayerRoomProps) {
+export default function MultiplayerRoom({ roomId, onLeave }: MultiplayerRoomProps) {
   const profile = getProfile();
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const [topic, setTopic] = useState("");
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [permissionError, setPermissionError] = useState(false);
 
+  const { remoteStream, connectionState, cleanup } = useWebRTC(roomId, stream);
+
   useEffect(() => {
-    // Randomize the topic when the room loads
     setTopic(TOPIC_POOL[Math.floor(Math.random() * TOPIC_POOL.length)]);
 
-    // Request Camera and Microphone access
     const startMedia = async () => {
       try {
-        const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-          video: true, 
-          audio: true 
+        const mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true
         });
         setStream(mediaStream);
         if (localVideoRef.current) {
@@ -49,13 +52,19 @@ export default function MultiplayerRoom({ onLeave }: MultiplayerRoomProps) {
 
     startMedia();
 
-    // Cleanup: Turn off the camera when they leave the room
     return () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []); // Only run once on mount
+  }, []);
+
+  // Wire remote stream to video element
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream, connectionState]);
 
   const toggleMute = () => {
     if (stream) {
@@ -72,6 +81,7 @@ export default function MultiplayerRoom({ onLeave }: MultiplayerRoomProps) {
   };
 
   const handleEndCall = () => {
+    cleanup();
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
     }
@@ -80,17 +90,57 @@ export default function MultiplayerRoom({ onLeave }: MultiplayerRoomProps) {
 
   return (
     <div className="relative min-h-screen bg-gray-900 overflow-hidden flex items-center justify-center font-sans">
-      
-      {/* Remote User Placeholder (Background) */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center opacity-50">
-        <div className="w-32 h-32 rounded-full bg-gray-800 flex items-center justify-center mb-4 border-4 border-gray-700">
-          <User className="w-16 h-16 text-gray-500" />
+
+      {/* Remote User Video (Full Screen Background) - always rendered so ref is available */}
+      <video
+        ref={remoteVideoRef}
+        autoPlay
+        playsInline
+        className={`absolute inset-0 w-full h-full object-cover ${remoteStream ? '' : 'hidden'}`}
+      />
+
+      {/* Overlay when remote video not yet available */}
+      {!remoteStream && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          {connectionState === "failed" ? (
+            <>
+              <div className="w-32 h-32 rounded-full bg-red-900/50 flex items-center justify-center mb-4 border-4 border-red-700">
+                <User className="w-16 h-16 text-red-400" />
+              </div>
+              <p className="text-red-400 text-xl font-medium">Connection failed</p>
+              <p className="text-gray-500 text-sm mt-2">Please end the call and try again.</p>
+            </>
+          ) : (
+            <>
+              <div className="w-32 h-32 rounded-full bg-gray-800 flex items-center justify-center mb-4 border-4 border-gray-700">
+                <Loader2 className="w-12 h-12 text-teal-400 animate-spin" />
+              </div>
+              <p className="text-gray-400 text-xl font-medium animate-pulse">Connecting to partner...</p>
+            </>
+          )}
         </div>
-        <p className="text-gray-400 text-xl font-medium animate-pulse">Partner Connected</p>
+      )}
+
+      {/* Connection Status Pill */}
+      <div className="absolute top-4 right-4 z-10">
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-md ${
+          connectionState === "connected"
+            ? "bg-green-500/20 text-green-400 border border-green-500/30"
+            : connectionState === "failed"
+            ? "bg-red-500/20 text-red-400 border border-red-500/30"
+            : "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
+        }`}>
+          <span className={`w-2 h-2 rounded-full ${
+            connectionState === "connected" ? "bg-green-400" :
+            connectionState === "failed" ? "bg-red-400" : "bg-yellow-400 animate-pulse"
+          }`} />
+          {connectionState === "connected" ? "Connected" :
+           connectionState === "failed" ? "Failed" : "Connecting..."}
+        </div>
       </div>
 
       {/* Discussion Topic Overlay (Top) */}
-      <motion.div 
+      <motion.div
         initial={{ y: -50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         className="absolute top-8 left-0 right-0 px-4 z-10 flex justify-center"
@@ -109,7 +159,7 @@ export default function MultiplayerRoom({ onLeave }: MultiplayerRoomProps) {
       )}
 
       {/* Local User PiP (Bottom Right) */}
-      <motion.div 
+      <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         className="absolute bottom-32 right-6 w-32 md:w-48 aspect-[3/4] bg-gray-800 rounded-2xl overflow-hidden shadow-2xl border-2 border-gray-700 z-20"
@@ -119,13 +169,13 @@ export default function MultiplayerRoom({ onLeave }: MultiplayerRoomProps) {
             <User className="w-12 h-12 text-gray-500" />
           </div>
         ) : (
-          <video 
+          <video
             ref={localVideoRef}
-            autoPlay 
-            playsInline 
-            muted 
+            autoPlay
+            playsInline
+            muted
             className="w-full h-full object-cover mirror"
-            style={{ transform: "scaleX(-1)" }} // Mirrors the camera naturally
+            style={{ transform: "scaleX(-1)" }}
           />
         )}
         <div className="absolute bottom-2 left-2 bg-black/50 px-2 py-1 rounded text-xs text-white">
@@ -134,32 +184,32 @@ export default function MultiplayerRoom({ onLeave }: MultiplayerRoomProps) {
       </motion.div>
 
       {/* Call Controls (Bottom Center) */}
-      <motion.div 
+      <motion.div
         initial={{ y: 50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         className="absolute bottom-8 left-0 right-0 flex justify-center items-center gap-6 z-20"
       >
-        <Button 
-          variant="outline" 
-          size="icon" 
+        <Button
+          variant="outline"
+          size="icon"
           onClick={toggleMute}
           className={`w-14 h-14 rounded-full border-0 ${isMuted ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-gray-800/80 hover:bg-gray-700 text-white backdrop-blur-md'}`}
         >
           {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
         </Button>
 
-        <Button 
-          variant="destructive" 
-          size="icon" 
+        <Button
+          variant="destructive"
+          size="icon"
           onClick={handleEndCall}
           className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 shadow-lg hover:scale-105 transition-transform"
         >
           <PhoneOff className="w-7 h-7 text-white" />
         </Button>
 
-        <Button 
-          variant="outline" 
-          size="icon" 
+        <Button
+          variant="outline"
+          size="icon"
           onClick={toggleVideo}
           className={`w-14 h-14 rounded-full border-0 ${isVideoOff ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-gray-800/80 hover:bg-gray-700 text-white backdrop-blur-md'}`}
         >
