@@ -8,12 +8,12 @@ CommPractice is a scenario-based communication practice web app built with React
 
 ## Features
 
-- Guided conversation practice with scenario flows
-- Airport check-in practice in voice mode
-- Airport check-in practice in AAC mode
-- Onboarding and role-based flow (learner and therapist)
-- Multiplayer lobby flow
-- AI-assisted checkpoint analysis with local fallback when no API key is configured
+- Guided scenario practice with structured checkpoints
+- Airport check-in flow in voice mode
+- Airport check-in flow in AAC mode
+- Role-based onboarding for learners, caregivers, and therapists
+- Live multiplayer matchmaking and room flow
+- Optional AI-assisted feedback with a local fallback when no Groq key is configured
 
 ## Tech Stack
 
@@ -24,73 +24,89 @@ CommPractice is a scenario-based communication practice web app built with React
 - shadcn/ui and Radix UI
 - Framer Motion
 - TanStack Query
+- Firebase Auth and Firestore
 - Vitest and Testing Library
 
 ## Project Structure
 
 ```text
-src/
-  components/   Reusable feature and UI components
-  data/         Scenario and airport check-in data
-  hooks/        Custom React hooks
-  lib/          AI agent and utility logic
-  pages/        Page-level flows
-  test/         Test setup and test files
-public/
-  aac-custom/   AAC custom assets
-  aac-source/   AAC source assets
-  aac-supplement/ AAC supplementary assets
+api/            Serverless endpoints
+public/         AAC and static assets
+src/components/ Reusable UI and feature components
+src/data/       Scenario data
+src/hooks/      Custom hooks
+src/lib/        Shared client logic and storage helpers
+src/pages/      Main app screens and flows
+src/test/       Test setup and test files
 ```
 
 ## Prerequisites
 
 - Node.js 18+
 - npm 9+
+- A Firebase project for auth and Firestore
 
 ## Getting Started
 
-1. Clone the repository.
-
-```bash
-git clone git@github.com:broccoli0616/connect-and-chat-pro.git
-cd connect-and-chat-pro
-```
-
-1. Install dependencies.
+1. Clone the repository and enter the project directory.
+2. Install dependencies:
 
 ```bash
 npm install
 ```
 
-1. Create your local environment file.
+3. Copy the example environment file:
 
 ```bash
 cp .env.example .env
 ```
 
-1. Set your API key in `.env` if you want AI evaluation.
+4. Fill in your own environment values:
 
 ```env
-VITE_GROQ_API_KEY=your_groq_api_key_here
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_STORAGE_BUCKET=...
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
+VITE_FIREBASE_MEASUREMENT_ID=...
+VITE_GROQ_API_KEY=...
 ```
 
-1. Start the development server.
+5. Start the development server:
 
 ```bash
 npm run dev
 ```
 
-1. Open the local URL shown in terminal (usually [http://localhost:5173](http://localhost:5173)).
+The Vite dev server runs on `http://localhost:8080` in this repo.
+
+## TURN / Multiplayer Notes
+
+- Multiplayer signaling uses Firebase.
+- TURN credentials are fetched from [`api/turn-credentials.ts`](./api/turn-credentials.ts).
+- To enable TURN on a deployed serverless runtime, set `METERED_API_KEY` and `METERED_DOMAIN`.
+- If the TURN endpoint is unavailable, the app falls back to public STUN servers.
+
+## How To Use The App
+
+1. Open the app and log in or create a profile.
+2. Choose a role during registration: learner, caregiver, or therapist.
+3. Learners and caregivers land on the mode selection screen.
+4. Choose `Solo Practice` to run a guided scenario, then pick voice or AAC mode.
+5. Choose `Multiplayer` to enter matchmaking and join a live practice room.
+6. Therapists are routed to the therapist dashboard after sign-in.
 
 ## Available Scripts
 
-- `npm run dev`: Start development server
-- `npm run build`: Build for production
-- `npm run build:dev`: Build with development mode
-- `npm run preview`: Preview production build locally
-- `npm run lint`: Run ESLint
-- `npm test`: Run tests once with Vitest
-- `npm run test:watch`: Run tests in watch mode
+- `npm run dev` starts the local dev server
+- `npm run build` creates a production build
+- `npm run build:dev` creates a development-mode build
+- `npm run preview` previews the production build locally
+- `npm run lint` runs ESLint
+- `npm test` runs the Vitest suite once
+- `npm run test:watch` runs Vitest in watch mode
 
 ## Testing
 
@@ -108,16 +124,12 @@ Production deployment is hosted on Vercel:
 
 [Vercel Deployment](https://connect-and-chat-pro.vercel.app/)
 
-## Roadmap
+## Publishing Checklist
 
-- Expand scenario coverage for more daily communication situations
-- Improve coaching quality and feedback detail
-- Enhance multiplayer interactions
-- Explore immersive communication practice experiences
+- Keep `.env`, `.vercel/`, `.cert/`, and key/cert files out of Git.
+- Use your own Firebase and Metered values in local or deployment env vars.
+- Review any screenshots, posters, or docs before publishing if they contain team or project-specific details.
 
-## Project Poster
-
-![CommPractice Project Poster](./src/assets/commpractice_poster%20%281%29.png)
 ## Team
 
 - Li Xuanming

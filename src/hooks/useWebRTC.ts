@@ -9,12 +9,24 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 
-const ICE_SERVERS: RTCConfiguration = {
+const FALLBACK_ICE: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
   ],
 };
+
+async function getIceConfig(): Promise<RTCConfiguration> {
+  try {
+    const resp = await fetch("/api/turn-credentials");
+    const iceServers = await resp.json();
+    console.log("[WebRTC] TURN servers fetched:", iceServers.length, "servers");
+    return { iceServers };
+  } catch (err) {
+    console.error("[WebRTC] Failed to fetch TURN servers, using STUN only:", err);
+    return FALLBACK_ICE;
+  }
+}
 
 export type ConnectionState =
   | "new"
@@ -77,9 +89,11 @@ export function useWebRTC(
 
       const roomData = roomSnap.data();
       const isOfferer = roomData.player1 === uid;
+      console.log(`[WebRTC] Role: ${isOfferer ? "OFFERER" : "ANSWERER"}, Room: ${roomId}`);
 
-      // Create peer connection
-      const pc = new RTCPeerConnection(ICE_SERVERS);
+      // Create peer connection with STUN + TURN
+      const iceConfig = await getIceConfig();
+      const pc = new RTCPeerConnection(iceConfig);
       pcRef.current = pc;
 
       // Add local tracks
@@ -89,6 +103,7 @@ export function useWebRTC(
 
       // Receive remote tracks
       pc.ontrack = (event) => {
+        console.log("[WebRTC] Remote track received:", event.track.kind);
         if (!isMountedRef.current) return;
         setRemoteStream(event.streams[0]);
       };
@@ -96,8 +111,8 @@ export function useWebRTC(
       // Track connection state (use both events for browser compatibility)
       const updateConnectionState = () => {
         if (!isMountedRef.current) return;
-        // Prefer connectionState, fall back to iceConnectionState
         const state = (pc.connectionState ?? pc.iceConnectionState) as ConnectionState;
+        console.log("[WebRTC] Connection state:", state, "| ICE:", pc.iceConnectionState, "| Gathering:", pc.iceGatheringState);
         setConnectionState(state);
       };
       pc.onconnectionstatechange = updateConnectionState;
@@ -114,10 +129,13 @@ export function useWebRTC(
       // Send ICE candidates to Firestore
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          console.log("[WebRTC] Sending ICE candidate:", event.candidate.type, event.candidate.protocol);
           addDoc(
             collection(db, "matchmaking_rooms", roomId, myIceColl),
             event.candidate.toJSON()
           );
+        } else {
+          console.log("[WebRTC] ICE gathering complete");
         }
       };
 
@@ -153,6 +171,7 @@ export function useWebRTC(
         await updateDoc(roomRef, {
           offer: { type: offer.type, sdp: offer.sdp },
         });
+        console.log("[WebRTC] Offer created and sent to Firestore");
 
         setConnectionState("connecting");
 
@@ -160,11 +179,13 @@ export function useWebRTC(
         const unsubRoom = onSnapshot(roomRef, (snapshot) => {
           const data = snapshot.data();
           if (data?.answer && !remoteDescSetRef.current) {
+            console.log("[WebRTC] Answer received from Firestore");
             pc.setRemoteDescription(
               new RTCSessionDescription(data.answer)
             ).then(() => {
               remoteDescSetRef.current = true;
               flushIceCandidates();
+              console.log("[WebRTC] Remote description set, ICE candidates flushed");
             });
           }
         });
@@ -172,10 +193,12 @@ export function useWebRTC(
       } else {
         // --- ANSWERER FLOW ---
         setConnectionState("connecting");
+        console.log("[WebRTC] Waiting for offer...");
 
         const unsubRoom = onSnapshot(roomRef, async (snapshot) => {
           const data = snapshot.data();
           if (data?.offer && !remoteDescSetRef.current) {
+            console.log("[WebRTC] Offer received from Firestore");
             await pc.setRemoteDescription(
               new RTCSessionDescription(data.offer)
             );
@@ -187,6 +210,7 @@ export function useWebRTC(
             await updateDoc(roomRef, {
               answer: { type: answer.type, sdp: answer.sdp },
             });
+            console.log("[WebRTC] Answer created and sent to Firestore");
           }
         });
         unsubscribesRef.current.push(unsubRoom);

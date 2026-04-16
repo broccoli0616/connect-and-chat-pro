@@ -2,17 +2,35 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
+const requiredFirebaseEnv = [
+  "VITE_FIREBASE_API_KEY",
+  "VITE_FIREBASE_AUTH_DOMAIN",
+  "VITE_FIREBASE_PROJECT_ID",
+  "VITE_FIREBASE_STORAGE_BUCKET",
+  "VITE_FIREBASE_MESSAGING_SENDER_ID",
+  "VITE_FIREBASE_APP_ID",
+] as const;
+
 const firebaseConfig = {
-  apiKey: "AIzaSyDn0NWcdQ3DbYlc3W803oCJ5-Pefc-q1Qs",
-  authDomain: "commpractice-a20fa.firebaseapp.com",
-  projectId: "commpractice-a20fa",
-  storageBucket: "commpractice-a20fa.firebasestorage.app",
-  messagingSenderId: "596008931732",
-  appId: "1:596008931732:web:0dd680ef1b9565c09c3f81",
-  measurementId: "G-CFLKCMM2EG"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? "",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? "",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? "",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ?? "",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? "",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID ?? "",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID ?? "",
 };
 
-// Initialize Firebase
+const missingFirebaseEnv = requiredFirebaseEnv.filter(
+  (name) => !import.meta.env[name]
+);
+
+if (missingFirebaseEnv.length > 0) {
+  console.warn(
+    `[firebase] Missing environment variables: ${missingFirebaseEnv.join(", ")}. Authentication and Firestore features require Firebase config in .env.`
+  );
+}
+
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
